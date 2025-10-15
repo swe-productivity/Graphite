@@ -3,9 +3,8 @@
 use super::common::{format, texture};
 use super::{TextureImportError, TextureImportResult, TextureImporter};
 use cef::{AcceleratedPaintInfo, sys::cef_color_type_t};
-use core_foundation::base::{CFType, TCFType};
 use objc2_io_surface::{IOSurface, IOSurfaceRef};
-use objc2_metal::{MTLDevice, MTLPixelFormat, MTLTexture, MTLTextureDescriptor, MTLTextureType, MTLTextureUsage};
+use objc2_metal::{MTLPixelFormat, MTLTextureDescriptor, MTLTextureType, MTLTextureUsage};
 use std::os::raw::c_void;
 use wgpu::hal::api;
 
@@ -58,7 +57,7 @@ impl TextureImporter for IOSurfaceImporter {
 impl IOSurfaceImporter {
 	fn import_via_metal(&self, device: &wgpu::Device) -> TextureImportResult {
 		// Get wgpu's Metal device
-		use wgpu::{hal::Api, wgc::api::Metal};
+		use wgpu::wgc::api::Metal;
 		let hal_texture = unsafe {
 			device.as_hal::<api::Metal, _, _>(|device| {
 				let Some(device) = device else {
@@ -72,9 +71,9 @@ impl IOSurfaceImporter {
 
 				// Wrap Metal texture in wgpu-hal texture
 				let hal_texture = <api::Metal as wgpu::hal::Api>::Device::texture_from_raw(
-					metal_texture.as_ptr() as *mut metal::MTLTexture,
+					metal_texture,
 					format::cef_to_wgpu(self.format)?,
-					metal::MTLTextureType::D2,
+					MTLTextureType(2), // MTLTextureType2D
 					self.width,
 					self.height,
 					wgpu::hal::CopyExtent {
@@ -120,8 +119,7 @@ impl IOSurfaceImporter {
 
 		// Convert handle to IOSurface
 		let iosurface = unsafe {
-			let iosurface_ref = std::mem::transmute::<*mut c_void, IOSurfaceRef>(self.handle);
-			IOSurface::from(iosurface_ref)
+			IOSurface::from_ptr(std::mem::transmute::<*mut c_void, *mut objc2::runtime::AnyObject>(self.handle))
 		};
 
 		// Get the Metal device from wgpu-hal
@@ -144,7 +142,7 @@ impl IOSurfaceImporter {
 		// Create Metal texture from IOSurface
 		let metal_texture = unsafe {
 			let device = metal_device.lock();
-			device.newTextureWithDescriptor_iosurface_plane(&texture_descriptor, &iosurface, 0)
+			objc2_metal::MTLDevice::newTextureWithDescriptor_iosurface_plane(&*device, &texture_descriptor, &iosurface, 0)
 		};
 
 		let Some(metal_texture) = metal_texture else {

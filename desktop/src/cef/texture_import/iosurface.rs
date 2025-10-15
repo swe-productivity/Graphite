@@ -72,9 +72,9 @@ impl IOSurfaceImporter {
 
 				// Wrap Metal texture in wgpu-hal texture
 				let hal_texture = <api::Metal as wgpu::hal::Api>::Device::texture_from_raw(
-					metal_texture,
+					metal_texture.as_ptr() as *mut metal::MTLTexture,
 					format::cef_to_wgpu(self.format)?,
-					objc2_metal::MTLTextureType::Type2D,
+					metal::MTLTextureType::D2,
 					self.width,
 					self.height,
 					wgpu::hal::CopyExtent {
@@ -121,7 +121,7 @@ impl IOSurfaceImporter {
 		// Convert handle to IOSurface
 		let iosurface = unsafe {
 			let iosurface_ref = std::mem::transmute::<*mut c_void, IOSurfaceRef>(self.handle);
-			IOSurface::from_ptr(iosurface_ref)
+			IOSurface::from(iosurface_ref)
 		};
 
 		// Get the Metal device from wgpu-hal
@@ -143,7 +143,8 @@ impl IOSurfaceImporter {
 
 		// Create Metal texture from IOSurface
 		let metal_texture = unsafe {
-			metal_device.lock().newTextureWithDescriptor_iosurface_plane(&texture_descriptor, &iosurface, 0)
+			let device = metal_device.lock();
+			device.newTextureWithDescriptor_iosurface_plane(&texture_descriptor, &iosurface, 0)
 		};
 
 		let Some(metal_texture) = metal_texture else {

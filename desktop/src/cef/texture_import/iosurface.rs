@@ -3,13 +3,11 @@
 use super::common::{format, texture};
 use super::{TextureImportError, TextureImportResult, TextureImporter};
 use cef::{AcceleratedPaintInfo, sys::cef_color_type_t};
+use core_foundation::base::TCFType;
 use metal::foreign_types::ForeignType;
-use metal::{Device, MTLPixelFormat, MTLTextureDescriptor, MTLTextureType, MTLTextureUsage, Texture};
+use metal::{Device, MTLPixelFormat, MTLTextureDescriptor, MTLTextureType, MTLTextureUsage, Texture, TextureRef};
 use std::os::raw::c_void;
 use wgpu::hal::api;
-
-// IOSurface type from Core Foundation
-type IOSurfaceRef = *mut c_void;
 
 pub struct IOSurfaceImporter {
 	pub handle: *mut c_void,
@@ -127,28 +125,37 @@ impl IOSurfaceImporter {
 		// Convert CEF format to Metal pixel format
 		let metal_format = self.cef_to_metal_format(self.format)?;
 
-		// Create Metal texture descriptor using texture2DDescriptorWithPixelFormat
-		let descriptor = MTLTextureDescriptor::texture_2d_descriptor(
-			metal_format,
-			self.width as u64,
-			self.height as u64,
-			false, // mipmapped
-		);
-		descriptor.set_usage(MTLTextureUsage::ShaderRead);
-
-		// Create Metal texture from IOSurface using Objective-C runtime
+		// Create Metal texture from IOSurface using objc runtime
+		// We need to use raw objc because the metal crate doesn't expose IOSurface creation directly
 		unsafe {
-			let iosurface = self.handle as IOSurfaceRef;
-
-			// Call newTextureWithDescriptor:iosurface:plane: on the Metal device
-			// This uses objc runtime to call the Metal API
 			use objc::runtime::Object;
-			use objc::{msg_send, sel, sel_impl};
+			use objc::{class, msg_send, sel, sel_impl};
 
-			let device_ptr = metal_device.lock().as_ptr() as *mut Object;
-			let descriptor_ptr = descriptor.as_ptr() as *mut Object;
+			let iosurface = self.handle;
 
-			let metal_texture: *mut Object = msg_send![device_ptr, newTextureWithDescriptor:descriptor_ptr iosurface:iosurface plane:0u64];
+			// Create texture descriptor using NSObject/Objective-C
+			let descriptor_class = class!(MTLTextureDescriptor);
+			let descriptor: *mut Object = msg_send![descriptor_class, new];
+
+			// Set descriptor properties
+			let _: () = msg_send![descriptor, setTextureType: MTLTextureType::D2];
+			let _: () = msg_send![descriptor, setPixelFormat: metal_format];
+			let _: () = msg_send![descriptor, setWidth: self.width as u64];
+			let _: () = msg_send![descriptor, setHeight: self.height as u64];
+			let _: () = msg_send![descriptor, setDepth: 1u64];
+			let _: () = msg_send![descriptor, setMipmapLevelCount: 1u64];
+			let _: () = msg_send![descriptor, setSampleCount: 1u64];
+			let _: () = msg_send![descriptor, setArrayLength: 1u64];
+			let _: () = msg_send![descriptor, setUsage: MTLTextureUsage::ShaderRead.bits()];
+
+			// Get device pointer
+			let device_ptr = metal_device.lock().as_ptr();
+
+			// Call newTextureWithDescriptor:iosurface:plane:
+			let metal_texture: *mut Object = msg_send![device_ptr, newTextureWithDescriptor:descriptor iosurface:iosurface plane:0u64];
+
+			// Release the descriptor
+			let _: () = msg_send![descriptor, release];
 
 			if metal_texture.is_null() {
 				return Err(TextureImportError::PlatformError {
@@ -156,8 +163,9 @@ impl IOSurfaceImporter {
 				});
 			}
 
-			// Wrap in metal::Texture using ForeignType
-			Ok(Texture::from_ptr(metal_texture))
+			// Cast to correct type and wrap in metal::Texture
+			let mtl_texture = metal_texture as *mut metal::MTLTexture;
+			Ok(Texture::from_ptr(mtl_texture))
 		}
 	}
 

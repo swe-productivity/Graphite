@@ -3,8 +3,8 @@
 use super::common::{format, texture};
 use super::{TextureImportError, TextureImportResult, TextureImporter};
 use cef::{AcceleratedPaintInfo, sys::cef_color_type_t};
-use core_foundation::base::TCFType;
-use metal::{Device, MTLPixelFormat, MTLResourceOptions, MTLTextureDescriptor, MTLTextureType, MTLTextureUsage, Texture};
+use metal::foreign_types::ForeignType;
+use metal::{Device, MTLPixelFormat, MTLTextureDescriptor, MTLTextureType, MTLTextureUsage, Texture};
 use std::os::raw::c_void;
 use wgpu::hal::api;
 
@@ -73,17 +73,18 @@ impl IOSurfaceImporter {
 				let metal_texture = self.import_iosurface_to_metal_texture(hal_device)?;
 
 				// Wrap Metal texture in wgpu-hal texture
+				// texture_from_raw signature: (texture, format, texture_type, mip_levels, sample_count, copy_extent)
 				let hal_texture = <api::Metal as wgpu::hal::Api>::Device::texture_from_raw(
 					metal_texture,
 					format::cef_to_wgpu(self.format)?,
-					wgpu::TextureDimension::D2,
-					wgpu::Extent3d {
-						width: self.width,
-						height: self.height,
-						depth_or_array_layers: 1,
-					},
+					MTLTextureType::D2,
 					1, // mip_level_count
 					1, // sample_count
+					wgpu::hal::CopyExtent {
+						width: self.width,
+						height: self.height,
+						depth: 1,
+					},
 				);
 
 				Ok(hal_texture)
@@ -126,17 +127,13 @@ impl IOSurfaceImporter {
 		// Convert CEF format to Metal pixel format
 		let metal_format = self.cef_to_metal_format(self.format)?;
 
-		// Create Metal texture descriptor
-		let descriptor = MTLTextureDescriptor::new();
-		descriptor.set_texture_type(MTLTextureType::D2);
-		descriptor.set_pixel_format(metal_format);
-		descriptor.set_width(self.width as u64);
-		descriptor.set_height(self.height as u64);
-		descriptor.set_depth(1);
-		descriptor.set_mipmap_level_count(1);
-		descriptor.set_sample_count(1);
-		descriptor.set_array_length(1);
-		descriptor.set_resource_options(MTLResourceOptions::StorageModeShared);
+		// Create Metal texture descriptor using texture2DDescriptorWithPixelFormat
+		let descriptor = MTLTextureDescriptor::texture_2d_descriptor(
+			metal_format,
+			self.width as u64,
+			self.height as u64,
+			false, // mipmapped
+		);
 		descriptor.set_usage(MTLTextureUsage::ShaderRead);
 
 		// Create Metal texture from IOSurface using Objective-C runtime
@@ -159,7 +156,7 @@ impl IOSurfaceImporter {
 				});
 			}
 
-			// Wrap in metal::Texture
+			// Wrap in metal::Texture using ForeignType
 			Ok(Texture::from_ptr(metal_texture))
 		}
 	}

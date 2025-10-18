@@ -4,7 +4,7 @@ use super::common::{format, texture};
 use super::{TextureImportError, TextureImportResult, TextureImporter};
 use cef::{AcceleratedPaintInfo, sys::cef_color_type_t};
 use metal::foreign_types::ForeignType;
-use metal::{ MTLPixelFormat, MTLTextureType, MTLTextureUsage, Texture};
+use metal::{MTLPixelFormat, MTLTextureType, MTLTextureUsage, Texture};
 use std::os::raw::c_void;
 use wgpu::hal::api;
 

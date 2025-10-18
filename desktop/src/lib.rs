@@ -1,5 +1,5 @@
-use std::process::exit;
 use clap::Parser;
+use std::process::exit;
 use tracing_subscriber::EnvFilter;
 use winit::event_loop::EventLoop;
 

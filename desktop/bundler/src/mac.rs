@@ -5,8 +5,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 const PACKAGE_NAME: &str = "graphite-desktop-platform-mac";
-const APP_BIN_FEATURE: &str = "app";
-const HELPER_BIN_FEATURE: &str = "helper";
+const HELPER_BIN: &str = "graphite-desktop-platform-mac-helper";
 
 const APP_ID: &str = "rs.graphite.GraphiteEditor";
 const APP_NAME: &str = "Graphite Editor";
@@ -29,8 +28,8 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 		profile = "dev";
 	}
 
-	let app_bin = build_bin(APP_BIN_FEATURE, profile, &profile_path)?;
-	let helper_bin = build_bin(HELPER_BIN_FEATURE, profile, &profile_path)?;
+	let app_bin = build_bin(profile, &profile_path, None)?;
+	let helper_bin = build_bin(profile, &profile_path, Some(""))?;
 
 	let app_dir = bundle(&profile_path, &app_bin, &helper_bin);
 
@@ -41,13 +40,6 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 	}
 
 	Ok(())
-}
-
-fn build_bin(feature: &str, profile: &str, profile_path: &Path) -> Result<PathBuf, Box<dyn Error>> {
-	run_command("cargo", &["build", "--package", PACKAGE_NAME, "--profile", profile, "--no-default-features", "--features", feature])?;
-	let bin_path = profile_path.join(format!("{PACKAGE_NAME}-{feature}"));
-	fs::copy(profile_path.join(PACKAGE_NAME), &bin_path)?;
-	Ok(bin_path)
 }
 
 fn bundle(out_dir: &Path, app_bin: &Path, helper_bin: &Path) -> PathBuf {
@@ -87,27 +79,6 @@ fn copy_cef(app_dir: &Path) {
 		fs::remove_dir_all(&dest).unwrap();
 	}
 	copy_directory(&cef_src.join(FRAMEWORK), &dest);
-}
-
-fn copy_directory(src: &Path, dst: &Path) {
-	fs::create_dir_all(dst).unwrap();
-	for entry in fs::read_dir(src).unwrap() {
-		let entry = entry.unwrap();
-		let dst_path = dst.join(entry.file_name());
-		if entry.file_type().unwrap().is_dir() {
-			copy_directory(&entry.path(), &dst_path);
-		} else {
-			fs::copy(entry.path(), &dst_path).unwrap();
-		}
-	}
-}
-
-fn run_command(program: &str, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
-	let status = Command::new(program).args(args).stdout(Stdio::inherit()).stderr(Stdio::inherit()).status()?;
-	if !status.success() {
-		std::process::exit(1);
-	}
-	Ok(())
 }
 
 fn create_info_plist(dir: &Path, id: &str, exec_name: &str, is_helper: bool) -> Result<(), Box<dyn std::error::Error>> {

@@ -61,24 +61,3 @@ fn copy_cef(app_dir: &Path) {
 	let cef_src = PathBuf::from(std::env::var("CEF_PATH").expect("CEF_PATH needs to be set"));
 	copy_directory(&cef_src, app_dir);
 }
-
-fn copy_directory(src: &Path, dst: &Path) {
-	fs::create_dir_all(dst).unwrap();
-	for entry in fs::read_dir(src).unwrap() {
-		let entry = entry.unwrap();
-		let dst_path = dst.join(entry.file_name());
-		if entry.file_type().unwrap().is_dir() {
-			copy_directory(&entry.path(), &dst_path);
-		} else {
-			fs::copy(entry.path(), &dst_path).unwrap();
-		}
-	}
-}
-
-fn run_command(program: &str, args: &[&str]) -> Result<(), Box<dyn std::error::Error>> {
-	let status = Command::new(program).args(args).stdout(Stdio::inherit()).stderr(Stdio::inherit()).status()?;
-	if !status.success() {
-		std::process::exit(1);
-	}
-	Ok(())
-}

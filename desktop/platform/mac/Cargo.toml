@@ -8,13 +8,5 @@ repository = ""
 edition = "2024"
 rust-version = "1.87"
 
-[features]
-default = ["bundle"]
-bundle = ["dep:serde", "dep:plist"]
-app = ["dep:graphite-desktop"]
-helper = ["dep:graphite-desktop"]
-
 [dependencies]
 graphite-desktop = { path = "../..", optional = true }
-serde = { workspace = true, optional = true }
-plist = { version = "*", optional = true }

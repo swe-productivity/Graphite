@@ -8,11 +8,5 @@ repository = ""
 edition = "2024"
 rust-version = "1.87"
 
-[features]
-default = ["bundle"]
-bundle = ["dep:cef-dll-sys"]
-app = ["dep:graphite-desktop"]
-
 [dependencies]
 graphite-desktop = { path = "../..", optional = true }
-cef-dll-sys = { workspace = true, optional = true }

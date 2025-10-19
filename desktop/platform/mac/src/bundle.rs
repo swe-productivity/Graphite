@@ -19,6 +19,10 @@ const RESOURCES_PATH: &str = "Contents/Resources";
 const FRAMEWORK: &str = "Chromium Embedded Framework.framework";
 
 pub fn main() -> Result<(), Box<dyn Error>> {
+	if cfg!(not(target_os = "macos")) {
+		panic!("This bundler is only for MacOS");
+	}
+
 	let mut profile = env!("CARGO_PROFILE");
 	let profile_path = PathBuf::from(env!("CARGO_WORKSPACE_DIR")).join(format!("target/{profile}"));
 	if profile == "debug" {
@@ -39,7 +43,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 	Ok(())
 }
 
-fn build_bin(feature: &str, profile: &str, profile_path: &PathBuf) -> Result<PathBuf, Box<dyn Error>> {
+fn build_bin(feature: &str, profile: &str, profile_path: &Path) -> Result<PathBuf, Box<dyn Error>> {
 	run_command("cargo", &["build", "--package", PACKAGE_NAME, "--profile", profile, "--no-default-features", "--features", feature])?;
 	let bin_path = profile_path.join(format!("{PACKAGE_NAME}-{feature}"));
 	fs::copy(profile_path.join(PACKAGE_NAME), &bin_path)?;
@@ -64,19 +68,19 @@ fn bundle(out_dir: &Path, app_bin: &Path, helper_bin: &Path) -> PathBuf {
 
 fn create_app(out_dir: &Path, id: &str, name: &str, bin: &Path, is_helper: bool) -> PathBuf {
 	let bundle = out_dir.join(name).with_extension("app");
-	fs::create_dir_all(&bundle.join(EXEC_PATH)).unwrap();
+	fs::create_dir_all(bundle.join(EXEC_PATH)).unwrap();
 
 	let app_contents_dir: &Path = &bundle.join("Contents");
 	for p in &[EXEC_PATH, RESOURCES_PATH, FRAMEWORKS_PATH] {
 		fs::create_dir_all(app_contents_dir.join(p)).unwrap();
 	}
 
-	create_info_plist(&app_contents_dir, id, name, is_helper).unwrap();
+	create_info_plist(app_contents_dir, id, name, is_helper).unwrap();
 	fs::copy(bin, bundle.join(EXEC_PATH).join(name)).unwrap();
 	bundle
 }
 
-fn copy_cef(app_dir: &PathBuf) {
+fn copy_cef(app_dir: &Path) {
 	let cef_src = PathBuf::from(std::env::var("CEF_PATH").expect("CEF_PATH needs to be set"));
 	let dest: PathBuf = app_dir.join(FRAMEWORKS_PATH).join(FRAMEWORK);
 	if dest.exists() {

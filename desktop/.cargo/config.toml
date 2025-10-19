@@ -1,2 +1,0 @@
-[target.aarch64-apple-darwin]
-runner = "cargo run -p graphite-desktop-platform-mac -- open"

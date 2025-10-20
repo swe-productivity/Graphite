@@ -8,10 +8,6 @@ const PACKAGE: &str = "graphite-desktop-platform-win";
 const EXECUTABLE: &str = "graphite-editor.exe";
 
 pub fn main() -> Result<(), Box<dyn Error>> {
-	if cfg!(not(target_os = "windows")) {
-		panic!("This bundler is only for Windows");
-	}
-
 	let app_bin = build_bin(PACKAGE, None)?;
 
 	let executable = bundle(&profile_path(), &app_bin);
@@ -28,7 +24,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 fn bundle(out_dir: &Path, app_bin: &Path) -> PathBuf {
 	let app_dir = out_dir.join(APP_NAME);
 
-	empty_dir(&app_dir);
+	clean_dir(&app_dir);
 
 	copy_dir(&cef_path(), &app_dir);
 

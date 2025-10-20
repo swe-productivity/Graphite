@@ -16,10 +16,6 @@ const RESOURCES_PATH: &str = "Contents/Resources";
 const FRAMEWORK: &str = "Chromium Embedded Framework.framework";
 
 pub fn main() -> Result<(), Box<dyn Error>> {
-	if cfg!(not(target_os = "macos")) {
-		panic!("This bundler is only for MacOS");
-	}
-
 	let app_bin = build_bin(PACKAGE, None)?;
 	let helper_bin = build_bin(PACKAGE, Some(HELPER_BIN))?;
 
@@ -36,18 +32,18 @@ pub fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn bundle(out_dir: &Path, app_bin: &Path, helper_bin: &Path) -> PathBuf {
-	let app_dir = out_dir.join(name).with_extension("app");
+	let app_dir = out_dir.join(APP_NAME).with_extension("app");
 
 	clean_dir(&app_dir);
 
-	let app_dir = create_app(app_dir, APP_ID, APP_NAME, app_bin, false);
+	create_app(&app_dir, APP_ID, APP_NAME, app_bin, false);
 
-	for &helper_type in [None, Some("GPU"), Some("Renderer"), Some("Plugin"), Some("Alerts")] {
+	for helper_type in [None, Some("GPU"), Some("Renderer"), Some("Plugin"), Some("Alerts")] {
 		let helper_id_suffix = helper_type.map(|t| format!(".{t}")).unwrap_or_default();
 		let helper_id = format!("{APP_ID}.helper{helper_id_suffix}");
 		let helper_name_suffix = helper_type.map(|t| format!(" ({t})")).unwrap_or_default();
 		let helper_name = format!("{APP_NAME} Helper{helper_name_suffix}");
-		let helper_app_dir = app_dir.join(FRAMEWORKS_PATH).join(helper_name).with_extension("app");
+		let helper_app_dir = app_dir.join(FRAMEWORKS_PATH).join(&helper_name).with_extension("app");
 		create_app(&helper_app_dir, &helper_id, &helper_name, helper_bin, true);
 	}
 

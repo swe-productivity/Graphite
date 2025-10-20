@@ -45,7 +45,7 @@ pub(crate) fn run_command(program: &str, args: &[&str]) -> Result<(), Box<dyn st
 	Ok(())
 }
 
-pub(crate) fn empty_dir(dir: &Path) {
+pub(crate) fn clean_dir(dir: &Path) {
 	if dir.exists() {
 		fs::remove_dir_all(dir).unwrap();
 	}

@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use cef::args::Args;
 use cef::sys::{CEF_API_VERSION_LAST, cef_resultcode_t};
@@ -73,6 +73,16 @@ impl<H: CefEventHandler> CefContextBuilder<H> {
 		}
 	}
 
+	fn common_settings(instance_dir: &Path) -> Settings {
+		Settings {
+			windowless_rendering_enabled: 1,
+			root_cache_path: instance_dir.to_str().map(CefString::from).unwrap(),
+			cache_path: CefString::from(""),
+			disable_signal_handlers: 1,
+			..Default::default()
+		}
+	}
+
 	#[cfg(target_os = "macos")]
 	pub(crate) fn initialize(self, event_handler: H, disable_gpu_acceleration: bool) -> Result<impl CefContext, InitError> {
 		let instance_dir = create_instance_dir();
@@ -81,14 +91,11 @@ impl<H: CefEventHandler> CefContextBuilder<H> {
 		let app_root = exe.parent().and_then(|p| p.parent()).expect("bad path structure").parent().expect("bad path structure");
 
 		let settings = Settings {
-			windowless_rendering_enabled: 1,
+			main_bundle_path: CefString::from(app_root.to_str().unwrap()),
 			multi_threaded_message_loop: 0,
 			external_message_pump: 1,
-			root_cache_path: instance_dir.to_str().map(CefString::from).unwrap(),
-			cache_path: CefString::from(""),
-			no_sandbox: 1,
-			main_bundle_path: CefString::from(app_root.to_str().unwrap()),
-			..Default::default()
+			no_sandbox: 1, // GPU helper crashes when running with sandbox
+			..Self::common_settings(&instance_dir)
 		};
 
 		self.initialize_inner(&event_handler, settings)?;
@@ -101,11 +108,8 @@ impl<H: CefEventHandler> CefContextBuilder<H> {
 		let instance_dir = create_instance_dir();
 
 		let settings = Settings {
-			windowless_rendering_enabled: 1,
 			multi_threaded_message_loop: 1,
-			root_cache_path: instance_dir.to_str().map(CefString::from).unwrap(),
-			cache_path: CefString::from(""),
-			..Default::default()
+			..Self::common_settings(&instance_dir)
 		};
 
 		self.initialize_inner(&event_handler, settings)?;

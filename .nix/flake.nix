@@ -107,7 +107,7 @@
             allowBuiltinFetchGit = true;
           };
 
-          
+
           # TODO: Remove the need for this hash by using individual package resolutions and hashes from package-lock.json
           npmDeps = pkgs.fetchNpmDeps {
             inherit (finalAttrs) pname version;
@@ -131,6 +131,8 @@
           buildPhase = ''
             export HOME="$TMPDIR"
 
+            cargo build -p graphene-raster-nodes-shaders
+
             npm run build-desktop
           '';
 
@@ -144,7 +146,7 @@
             mkdir -p $out/share/icons/hicolor/scalable/apps
             cp $src/desktop/assets/graphite-icon-color.svg $out/share/icons/hicolor/scalable/apps/
           '';
-          
+
           doCheck = false;
 
           postFixup = ''

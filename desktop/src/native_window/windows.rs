@@ -21,14 +21,29 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 use windows::core::PCWSTR;
 use winit::window::Window;
 
+pub(super) struct WindowsNativeWindowHandle {
+	inner: WindowsNativeWindowHandleInner,
+}
+impl WindowsNativeWindowHandle {
+	pub(super) fn new(window: &dyn Window) -> Self {
+		let inner = WindowsNativeWindowHandleInner::new(window);
+		WindowsNativeWindowHandle { inner }
+	}
+}
+impl Drop for WindowsNativeWindowHandle {
+	fn drop(&mut self) {
+		self.inner.destroy();
+	}
+}
+
 #[derive(Clone)]
-pub(super) struct NativeWindowHandle {
+struct WindowsNativeWindowHandleInner {
 	main: HWND,
 	helper: HWND,
 	prev_window_message_handler: isize,
 }
-impl NativeWindowHandle {
-	pub(super) fn new(window: &dyn Window) -> NativeWindowHandle {
+impl WindowsNativeWindowHandleInner {
+	fn new(window: &dyn Window) -> WindowsNativeWindowHandleInner {
 		// Extract Win32 HWND from winit.
 		let hwnd = match window.window_handle().expect("No window handle").as_raw() {
 			RawWindowHandle::Win32(h) => HWND(h.hwnd.get() as *mut std::ffi::c_void),
@@ -70,7 +85,7 @@ impl NativeWindowHandle {
 			panic!("SetWindowLongPtrW failed");
 		}
 
-		let inner = NativeWindowHandle {
+		let inner = WindowsNativeWindowHandleInner {
 			main: hwnd,
 			helper,
 			prev_window_message_handler,
@@ -100,7 +115,7 @@ impl NativeWindowHandle {
 		inner
 	}
 
-	pub(super) fn destroy(&self) {
+	fn destroy(&self) {
 		registry::remove_by_main(self.main);
 
 		// Undo subclassing and destroy the helper window.
@@ -115,13 +130,13 @@ mod registry {
 	use std::cell::RefCell;
 	use windows::Win32::Foundation::HWND;
 
-	use super::NativeWindowHandle;
+	use crate::native_window::windows::WindowsNativeWindowHandleInner;
 
 	thread_local! {
-		static STORE: RefCell<Vec<NativeWindowHandle>> = RefCell::new(Vec::new());
+		static STORE: RefCell<Vec<WindowsNativeWindowHandleInner>> = RefCell::new(Vec::new());
 	}
 
-	pub(super) fn find_by_main(main: HWND) -> Option<NativeWindowHandle> {
+	pub(super) fn find_by_main(main: HWND) -> Option<WindowsNativeWindowHandleInner> {
 		STORE.with_borrow(|vec| vec.iter().find(|h| h.main == main).cloned())
 	}
 	pub(super) fn remove_by_main(main: HWND) {
@@ -129,7 +144,7 @@ mod registry {
 			vec.retain(|h| h.main != main);
 		});
 	}
-	pub(super) fn insert(handle: &NativeWindowHandle) {
+	pub(super) fn insert(handle: &WindowsNativeWindowHandleInner) {
 		STORE.with_borrow_mut(|vec| {
 			vec.push(handle.clone());
 		});

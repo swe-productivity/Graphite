@@ -2,7 +2,7 @@ use super::utility_functions::overlay_canvas_context;
 use crate::consts::{
 	ARC_SWEEP_GIZMO_RADIUS, COLOR_OVERLAY_BLUE, COLOR_OVERLAY_BLUE_50, COLOR_OVERLAY_GREEN, COLOR_OVERLAY_RED, COLOR_OVERLAY_WHITE, COLOR_OVERLAY_YELLOW, COLOR_OVERLAY_YELLOW_DULL,
 	COMPASS_ROSE_ARROW_SIZE, COMPASS_ROSE_HOVER_RING_DIAMETER, COMPASS_ROSE_MAIN_RING_DIAMETER, COMPASS_ROSE_RING_INNER_DIAMETER, DOWEL_PIN_RADIUS, MANIPULATOR_GROUP_MARKER_SIZE,
-	PIVOT_CROSSHAIR_LENGTH, PIVOT_CROSSHAIR_THICKNESS, PIVOT_DIAMETER, SEGMENT_SELECTED_THICKNESS,
+	PIVOT_CROSSHAIR_LENGTH, PIVOT_CROSSHAIR_THICKNESS, PIVOT_DIAMETER, RESIZE_HANDLE_SIZE, SEGMENT_SELECTED_THICKNESS, SKEW_TRIANGLE_OFFSET, SKEW_TRIANGLE_SIZE,
 };
 use crate::messages::portfolio::document::utility_types::document_metadata::LayerNodeIdentifier;
 use crate::messages::prelude::Message;
@@ -153,6 +153,11 @@ impl core::hash::Hash for OverlayContext {
 }
 
 impl OverlayContext {
+	pub fn reverse_scale(&self, distance: f64) -> f64 {
+		// No-op when rendering to canvas
+		distance
+	}
+
 	pub fn quad(&mut self, quad: Quad, stroke_color: Option<&str>, color_fill: Option<&str>) {
 		self.dashed_polygon(&quad.0, stroke_color, color_fill, None, None, None);
 	}
@@ -497,6 +502,20 @@ impl OverlayContext {
 		self.square(position, Some(MANIPULATOR_GROUP_MARKER_SIZE + 2.), Some(COLOR_OVERLAY_BLUE_50), Some(COLOR_OVERLAY_BLUE_50));
 		let color_fill = if selected { COLOR_OVERLAY_BLUE } else { COLOR_OVERLAY_WHITE };
 		self.square(position, None, Some(color_fill), Some(COLOR_OVERLAY_BLUE));
+	}
+
+	pub fn resize_handle(&mut self, position: DVec2, rotation: f64) {
+		let quad = DAffine2::from_angle_translation(rotation, position) * Quad::from_box([DVec2::splat(-RESIZE_HANDLE_SIZE / 2.), DVec2::splat(RESIZE_HANDLE_SIZE / 2.)]);
+		self.quad(quad, None, Some(COLOR_OVERLAY_WHITE));
+	}
+
+	pub fn skew_handles(&mut self, edge_start: DVec2, edge_end: DVec2) {
+		let edge_dir = (edge_end - edge_start).normalize();
+		let mid = edge_end.midpoint(edge_start);
+
+		for edge in [edge_dir, -edge_dir] {
+			self.draw_triangle(mid + edge * (3. + SKEW_TRIANGLE_OFFSET), edge, SKEW_TRIANGLE_SIZE, None, None);
+		}
 	}
 
 	/// Transforms the canvas context to adjust for DPI scaling

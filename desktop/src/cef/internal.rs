@@ -24,12 +24,11 @@ pub(super) use render_process_app::RenderProcessAppImpl;
 pub(super) use scheme_handler_factory::SchemeHandlerFactoryImpl;
 
 pub(super) trait NotifyViewInfoChanged {
-    fn notify_view_info_changed(&self);
+	fn notify_view_info_changed(&self);
 }
 impl<T: cef::ImplBrowserHost> NotifyViewInfoChanged for T {
-    fn notify_view_info_changed(&self) {
-        self.notify_screen_info_changed();
-        self.was_resized();
-    }
+	fn notify_view_info_changed(&self) {
+		self.notify_screen_info_changed();
+		self.was_resized();
+	}
 }
-        

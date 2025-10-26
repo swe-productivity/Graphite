@@ -12,7 +12,7 @@ use super::consts::{MULTICLICK_ALLOWED_TRAVEL, MULTICLICK_TIMEOUT, PINCH_ZOOM_SP
 pub(crate) fn handle_window_event(browser: &Browser, input_state: &mut InputState, event: &WindowEvent, scale: f64) {
 	match event {
 		WindowEvent::PointerMoved { position, .. } | WindowEvent::PointerEntered { position, .. } => {
-			input_state.cursor_move(&position.to_logical(2.0));
+			input_state.cursor_move(&position.to_logical(scale));
 
 			let Some(host) = browser.host() else { return };
 			host.send_mouse_move_event(Some(&input_state.into()), 0);

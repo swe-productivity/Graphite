@@ -57,8 +57,6 @@ pub struct PortfolioMessageHandler {
 	pub persistent_data: PersistentData,
 	pub executor: NodeGraphExecutor,
 	pub selection_mode: SelectionMode,
-	device_pixel_ratio: Option<f64>,
-	viewport_scale: Option<f64>,
 	pub reset_node_definitions_on_open: bool,
 	pub data_panel_open: bool,
 	#[derivative(Default(value = "true"))]
@@ -881,13 +879,6 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 			PortfolioMessage::SetActivePanel { panel } => {
 				self.active_panel = panel;
 				responses.add(DocumentMessage::SetActivePanel { active_panel: self.active_panel });
-			}
-			PortfolioMessage::SetDevicePixelRatio { ratio } => {
-				self.device_pixel_ratio = Some(ratio);
-				responses.add(OverlaysMessage::Draw);
-			}
-			PortfolioMessage::SetViewportScale { scale } => {
-				self.viewport_scale = Some(scale);
 			}
 			PortfolioMessage::SelectDocument { document_id } => {
 				// Auto-save the document we are leaving

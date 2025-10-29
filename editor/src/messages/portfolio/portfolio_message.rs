@@ -112,12 +112,6 @@ pub enum PortfolioMessage {
 	SetActivePanel {
 		panel: PanelType,
 	},
-	SetDevicePixelRatio {
-		ratio: f64,
-	},
-	SetViewportScale {
-		scale: f64,
-	},
 	SelectDocument {
 		document_id: DocumentId,
 	},

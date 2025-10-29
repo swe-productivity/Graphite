@@ -42,28 +42,26 @@ impl MessageHandler<OverlaysMessage, OverlaysMessageContext<'_>> for OverlaysMes
 					canvas_context.dyn_into().expect("Context should be a canvas 2d context")
 				});
 
-				let size = ipp.viewport_bounds.size().as_uvec2();
+				let size = viewport.physical_size().into_dvec2();
 
-				let [a, b, c, d, e, f] = DAffine2::from_scale(DVec2::splat(device_pixel_ratio)).to_cols_array();
+				let [a, b, c, d, e, f] = DAffine2::from_scale(DVec2::splat(viewport.convert_logical_to_physical(1.0))).to_cols_array();
 				let _ = canvas_context.set_transform(a, b, c, d, e, f);
-				canvas_context.clear_rect(0., 0., ipp.viewport_bounds.size().x, ipp.viewport_bounds.size().y);
+				canvas_context.clear_rect(0., 0., size.x, size.y);
 				let _ = canvas_context.reset_transform();
 
 				if visibility_settings.all() {
 					responses.add(DocumentMessage::GridOverlays {
 						context: OverlayContext {
 							render_context: canvas_context.clone(),
-							size: size.as_dvec2(),
-							device_pixel_ratio,
 							visibility_settings: visibility_settings.clone(),
+							viewport: *viewport,
 						},
 					});
 					for provider in &self.overlay_providers {
 						responses.add(provider(OverlayContext {
 							render_context: canvas_context.clone(),
-							size: size.as_dvec2(),
-							device_pixel_ratio,
 							visibility_settings: visibility_settings.clone(),
+							viewport: *viewport,
 						}));
 					}
 				}
@@ -71,7 +69,7 @@ impl MessageHandler<OverlaysMessage, OverlaysMessageContext<'_>> for OverlaysMes
 			#[cfg(all(not(target_family = "wasm"), not(test)))]
 			OverlaysMessage::Draw => {
 				use super::utility_types::OverlayContext;
-				
+
 				let overlay_context = OverlayContext::new(*viewport, visibility_settings);
 
 				if visibility_settings.all() {
@@ -85,7 +83,7 @@ impl MessageHandler<OverlaysMessage, OverlaysMessageContext<'_>> for OverlaysMes
 			}
 			#[cfg(all(not(target_family = "wasm"), test))]
 			OverlaysMessage::Draw => {
-				let _ = (responses, visibility_settings, ipp, device_pixel_ratio);
+				let _ = (responses, visibility_settings, viewport);
 			}
 			OverlaysMessage::AddProvider { provider: message } => {
 				self.overlay_providers.insert(message);

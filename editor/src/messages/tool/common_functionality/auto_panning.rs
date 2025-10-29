@@ -1,6 +1,6 @@
 use crate::consts::{DRAG_BEYOND_VIEWPORT_MAX_OVEREXTENSION_PIXELS, DRAG_BEYOND_VIEWPORT_SPEED_FACTOR};
-use crate::messages::tool::tool_messages::tool_prelude::*;
 use crate::messages::prelude::*;
+use crate::messages::tool::tool_messages::tool_prelude::*;
 
 #[derive(Clone, Debug, Default)]
 pub struct AutoPanning {

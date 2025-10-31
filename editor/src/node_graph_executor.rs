@@ -443,7 +443,7 @@ impl NodeGraphExecutor {
 		} = render_output.metadata;
 
 		// Apply the scale reversed from the viewport scale
-		let transform = DAffine2::from_scale(DVec2::splat(1.0 / scale));
+		let transform = DAffine2::from_scale(DVec2::splat(scale)).inverse();
 
 		upstream_footprints.iter_mut().for_each(|(_id, footprint)| {
 			footprint.transform.apply_transform(&transform);

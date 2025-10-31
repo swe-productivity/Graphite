@@ -963,6 +963,7 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 				let node_to_inspect = self.node_to_inspect();
 				let viewport_resolution = viewport.physical_size().into_dvec2().round().as_uvec2();
 				let viewport_scale = viewport.convert_logical_to_physical(1.0);
+				// let viewport_scale = 1.05;
 				let Some(document) = self.documents.get_mut(&document_id) else {
 					log::error!("Tried to render non-existent document");
 					return;

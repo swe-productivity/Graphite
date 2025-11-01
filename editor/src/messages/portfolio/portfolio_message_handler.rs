@@ -29,7 +29,6 @@ use graphene_std::Color;
 use graphene_std::renderer::Quad;
 use graphene_std::subpath::BezierHandles;
 use graphene_std::text::Font;
-use graphene_std::transform::Footprint;
 use graphene_std::vector::misc::HandleId;
 use graphene_std::vector::{PointId, SegmentId, Vector, VectorModificationType};
 use std::vec;
@@ -363,18 +362,15 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 				self.executor.update_font_cache(self.persistent_data.font_cache.clone());
 				for document_id in self.document_ids.iter() {
 					let node_to_inspect = self.node_to_inspect();
+
 					let scale = viewport.convert_logical_to_physical(1.0);
-					let transform = DAffine2::from_scale(DVec2::splat(scale));
-					let resolution = viewport.physical_size().into_dvec2().round().as_uvec2();
-					let viewport = Footprint {
-						transform,
-						resolution,
-						..Default::default()
-					};
+					let resolution = viewport.logical_size().into_dvec2().round().as_uvec2();
+
 					if let Ok(message) = self.executor.submit_node_graph_evaluation(
 						self.documents.get_mut(document_id).expect("Tried to render non-existent document"),
 						*document_id,
-						viewport,
+						resolution,
+						scale,
 						timing_information,
 						node_to_inspect,
 						true,
@@ -967,22 +963,18 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 			}
 			PortfolioMessage::SubmitGraphRender { document_id, ignore_hash } => {
 				let node_to_inspect = self.node_to_inspect();
-				let scale = viewport.convert_logical_to_physical(1.0);
-				let transform = DAffine2::from_scale(DVec2::splat(scale));
-				let resolution = viewport.physical_size().into_dvec2().round().as_uvec2();
-				let viewport = Footprint {
-					transform,
-					resolution,
-					..Default::default()
-				};
+
 				let Some(document) = self.documents.get_mut(&document_id) else {
 					log::error!("Tried to render non-existent document");
 					return;
 				};
 
+				let scale = viewport.convert_logical_to_physical(1.0);
+				let resolution = viewport.logical_size().into_dvec2().round().as_uvec2();
+
 				let result = self
 					.executor
-					.submit_node_graph_evaluation(document, document_id, viewport, timing_information, node_to_inspect, ignore_hash);
+					.submit_node_graph_evaluation(document, document_id, resolution, scale, timing_information, node_to_inspect, ignore_hash);
 
 				match result {
 					Err(description) => {

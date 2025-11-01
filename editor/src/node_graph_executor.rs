@@ -9,7 +9,7 @@ use graphene_std::application_io::TimingInformation;
 use graphene_std::application_io::{NodeGraphUpdateMessage, RenderConfig};
 use graphene_std::renderer::{RenderMetadata, format_transform_matrix};
 use graphene_std::text::FontCache;
-use graphene_std::transform::{ApplyTransform, Footprint};
+use graphene_std::transform::Footprint;
 use graphene_std::vector::Vector;
 use graphene_std::wasm_application_io::RenderOutputType;
 use interpreted_executor::dynamic_executor::ResolvedDocumentNodeTypesDelta;
@@ -140,8 +140,9 @@ impl NodeGraphExecutor {
 		time: TimingInformation,
 	) -> Result<Message, String> {
 		let transform = viewport.transform;
+		let render_transform = transform * document.metadata().document_to_viewport;
 		let viewport = Footprint {
-			transform: document.metadata().document_to_viewport * transform,
+			transform: render_transform,
 			..viewport
 		};
 		let render_config = RenderConfig {
@@ -164,7 +165,7 @@ impl NodeGraphExecutor {
 			ExecutionContext {
 				export_config: None,
 				document_id,
-				transform,
+				transform: document.metadata().document_to_viewport * render_transform.inverse(),
 			},
 		));
 
@@ -408,7 +409,7 @@ impl NodeGraphExecutor {
 	}
 
 	fn process_node_graph_output(&mut self, node_graph_output: TaggedValue, transform: DAffine2, responses: &mut VecDeque<Message>) -> Result<(), String> {
-		let TaggedValue::RenderOutput(render_output) = node_graph_output else {
+		let TaggedValue::RenderOutput(mut render_output) = node_graph_output else {
 			return Err(format!("Invalid node graph output type: {node_graph_output:#?}"));
 		};
 
@@ -431,19 +432,16 @@ impl NodeGraphExecutor {
 			_ => return Err(format!("Invalid node graph output type: {:#?}", render_output.data)),
 		}
 
+		// Apply the inverse viewport transform
+		render_output.metadata.apply_transform(transform);
+
 		let RenderMetadata {
-			mut upstream_footprints,
+			upstream_footprints,
 			local_transforms,
 			first_element_source_id,
 			click_targets,
 			clip_targets,
 		} = render_output.metadata;
-
-		// Apply the inverse viewport transform
-		let transform = transform.inverse();
-		upstream_footprints.iter_mut().for_each(|(_id, footprint)| {
-			footprint.transform.left_apply_transform(&transform);
-		});
 
 		// Run these update state messages immediately
 		responses.add(DocumentMessage::UpdateUpstreamTransforms {

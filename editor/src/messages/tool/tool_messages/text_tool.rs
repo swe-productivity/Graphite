@@ -510,7 +510,7 @@ impl Fsm for TextToolFsmState {
 		let ToolMessage::Text(event) = event else { return self };
 		match (self, event) {
 			(TextToolFsmState::Editing, TextToolMessage::Overlays { context: mut overlay_context }) => {
-				let transform = document.metadata().transform_to_viewport(tool_data.layer).to_cols_array().map(|n| overlay_context.reverse_scale(n));
+				let transform = document.metadata().transform_to_viewport(tool_data.layer).to_cols_array();
 				responses.add(FrontendMessage::DisplayEditableTextboxTransform { transform });
 				if let Some(editing_text) = tool_data.editing_text.as_mut() {
 					let far = graphene_std::text::bounding_box(&tool_data.new_text, &editing_text.font, font_cache, editing_text.typesetting, false);

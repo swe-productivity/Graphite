@@ -140,7 +140,7 @@ impl NodeGraphExecutor {
 		viewport_scale: f64,
 		time: TimingInformation,
 	) -> Result<Message, String> {
-		let transform = DAffine2::from_scale(DVec2::splat(viewport_scale)) * document.metadata().document_to_viewport;
+		let transform = document.metadata().document_to_viewport * DAffine2::from_scale(DVec2::splat(viewport_scale));
 
 		let render_config = RenderConfig {
 			viewport: Footprint {
@@ -436,9 +436,9 @@ impl NodeGraphExecutor {
 
 		let RenderMetadata {
 			mut upstream_footprints,
-			mut local_transforms,
+			local_transforms,
 			first_element_source_id,
-			mut click_targets,
+			click_targets,
 			clip_targets,
 		} = render_output.metadata;
 
@@ -446,15 +446,7 @@ impl NodeGraphExecutor {
 		let transform = DAffine2::from_scale(DVec2::splat(scale)).inverse();
 
 		upstream_footprints.iter_mut().for_each(|(_id, footprint)| {
-			footprint.transform.apply_transform(&transform);
-		});
-		local_transforms.iter_mut().for_each(|(_id, local_transform)| {
-			local_transform.apply_transform(&transform);
-		});
-		click_targets.iter_mut().for_each(|(_id, targets)| {
-			targets.iter_mut().for_each(|target| {
-				target.apply_transform(transform);
-			});
+			footprint.transform.left_apply_transform(&transform);
 		});
 
 		// Run these update state messages immediately

@@ -9,7 +9,7 @@ use graphene_std::application_io::TimingInformation;
 use graphene_std::application_io::{NodeGraphUpdateMessage, RenderConfig};
 use graphene_std::renderer::{RenderMetadata, format_transform_matrix};
 use graphene_std::text::FontCache;
-use graphene_std::transform::{self, ApplyTransform, Footprint};
+use graphene_std::transform::{ApplyTransform, Footprint};
 use graphene_std::vector::Vector;
 use graphene_std::wasm_application_io::RenderOutputType;
 use interpreted_executor::dynamic_executor::ResolvedDocumentNodeTypesDelta;

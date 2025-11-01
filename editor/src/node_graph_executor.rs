@@ -60,7 +60,7 @@ pub struct NodeGraphExecutor {
 struct ExecutionContext {
 	export_config: Option<ExportConfig>,
 	document_id: DocumentId,
-	scale: f64,
+	transform: DAffine2,
 }
 
 impl NodeGraphExecutor {
@@ -136,18 +136,16 @@ impl NodeGraphExecutor {
 		&mut self,
 		document: &mut DocumentMessageHandler,
 		document_id: DocumentId,
-		viewport_resolution: UVec2,
-		viewport_scale: f64,
+		viewport: Footprint,
 		time: TimingInformation,
 	) -> Result<Message, String> {
-		let transform = document.metadata().document_to_viewport * DAffine2::from_scale(DVec2::splat(viewport_scale));
-
+		let transform = viewport.transform;
+		let viewport = Footprint {
+			transform: document.metadata().document_to_viewport * transform,
+			..viewport
+		};
 		let render_config = RenderConfig {
-			viewport: Footprint {
-				transform,
-				resolution: viewport_resolution,
-				..Default::default()
-			},
+			viewport,
 			time,
 			#[cfg(any(feature = "resvg", feature = "vello"))]
 			export_format: graphene_std::application_io::ExportFormat::Raster,
@@ -166,7 +164,7 @@ impl NodeGraphExecutor {
 			ExecutionContext {
 				export_config: None,
 				document_id,
-				scale: viewport_scale,
+				transform,
 			},
 		));
 
@@ -178,14 +176,13 @@ impl NodeGraphExecutor {
 		&mut self,
 		document: &mut DocumentMessageHandler,
 		document_id: DocumentId,
-		viewport_resolution: UVec2,
-		viewport_scale: f64,
+		viewport: Footprint,
 		time: TimingInformation,
 		node_to_inspect: Option<NodeId>,
 		ignore_hash: bool,
 	) -> Result<Message, String> {
 		self.update_node_graph(document, node_to_inspect, ignore_hash)?;
-		self.submit_current_node_graph_evaluation(document, document_id, viewport_resolution, viewport_scale, time)
+		self.submit_current_node_graph_evaluation(document, document_id, viewport, time)
 	}
 
 	/// Evaluates a node graph for export
@@ -230,7 +227,7 @@ impl NodeGraphExecutor {
 		let execution_context = ExecutionContext {
 			export_config: Some(export_config),
 			document_id,
-			scale: 1.0,
+			transform: DAffine2::IDENTITY,
 		};
 		self.futures.push_back((execution_id, execution_context));
 
@@ -362,7 +359,7 @@ impl NodeGraphExecutor {
 						// Special handling for exporting the artwork
 						self.export(node_graph_output, export_config, responses)?;
 					} else {
-						self.process_node_graph_output(node_graph_output, execution_context.scale, responses)?;
+						self.process_node_graph_output(node_graph_output, execution_context.transform, responses)?;
 					}
 					responses.add(DeferMessage::TriggerGraphRun {
 						execution_id,
@@ -410,7 +407,7 @@ impl NodeGraphExecutor {
 		Ok(())
 	}
 
-	fn process_node_graph_output(&mut self, node_graph_output: TaggedValue, scale: f64, responses: &mut VecDeque<Message>) -> Result<(), String> {
+	fn process_node_graph_output(&mut self, node_graph_output: TaggedValue, transform: DAffine2, responses: &mut VecDeque<Message>) -> Result<(), String> {
 		let TaggedValue::RenderOutput(render_output) = node_graph_output else {
 			return Err(format!("Invalid node graph output type: {node_graph_output:#?}"));
 		};
@@ -442,9 +439,8 @@ impl NodeGraphExecutor {
 			clip_targets,
 		} = render_output.metadata;
 
-		// Apply the scale reversed from the viewport scale
-		let transform = DAffine2::from_scale(DVec2::splat(scale)).inverse();
-
+		// Apply the inverse viewport transform
+		let transform = transform.inverse();
 		upstream_footprints.iter_mut().for_each(|(_id, footprint)| {
 			footprint.transform.left_apply_transform(&transform);
 		});

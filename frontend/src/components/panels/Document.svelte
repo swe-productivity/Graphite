@@ -20,7 +20,7 @@
 	import type { DocumentState } from "@graphite/state-providers/document";
 	import { textInputCleanup } from "@graphite/utility-functions/keyboard-entry";
 	import { extractPixelData, rasterizeSVGCanvas } from "@graphite/utility-functions/rasterization";
-	import { updateBoundsOfViewports } from "@graphite/utility-functions/viewports";
+	import { updateBoundsOfViewports as updateViewport } from "@graphite/utility-functions/viewports";
 
 	import EyedropperPreview, { ZOOM_WINDOW_DIMENSIONS } from "@graphite/components/floating-menus/EyedropperPreview.svelte";
 	import LayoutCol from "@graphite/components/layout/LayoutCol.svelte";
@@ -392,10 +392,7 @@
 		rulerVertical?.resize();
 
 		// Send the new bounds of the viewports to the backend
-		if (viewport.parentElement) updateBoundsOfViewports(editor);
-
-		devicePixelRatio = window.devicePixelRatio;
-		editor.handle.updateViewportScale(devicePixelRatio);
+		if (viewport.parentElement) updateViewport(editor);
 	}
 
 	onMount(() => {

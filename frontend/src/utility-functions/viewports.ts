@@ -2,13 +2,17 @@ import { type Editor } from "@graphite/editor";
 
 export function updateBoundsOfViewports(editor: Editor) {
 	const viewports = Array.from(window.document.querySelectorAll("[data-viewport-container]"));
-	const boundsOfViewports = viewports.map((canvas) => {
-		const bounds = canvas.getBoundingClientRect();
-		return [bounds.left, bounds.top, bounds.right, bounds.bottom];
-	});
 
-	const flattened = boundsOfViewports.flat();
-	const data = Float64Array.from(flattened);
+	if (viewports.length <= 0) return;
 
-	if (boundsOfViewports.length > 0) editor.handle.boundsOfViewport(data);
+	const viewportBounds = viewports[0].getBoundingClientRect();
+
+	const left = viewportBounds.left;
+	const top = viewportBounds.top;
+	const right = viewportBounds.right;
+	const bottom = viewportBounds.bottom;
+
+	const scale = window.devicePixelRatio || 1;
+
+	editor.handle.updateViewport(left, top, right, bottom, scale);
 }

@@ -25,15 +25,22 @@ impl Default for ViewportMessageHandler {
 impl MessageHandler<ViewportMessage, ()> for ViewportMessageHandler {
 	fn process_message(&mut self, message: ViewportMessage, responses: &mut VecDeque<Message>, _: ()) {
 		match message {
-			ViewportMessage::UpdateScale { scale } => {
+			ViewportMessage::Update { x, y, width, height, scale } => {
 				assert_ne!(scale, 0.0, "Viewport scale cannot be zero");
 				self.scale = scale;
-			}
-			ViewportMessage::UpdateBounds { x, y, width, height } => {
+
 				self.bounds = LogicalBounds { x, y, width, height };
 			}
 			ViewportMessage::Trigger => {}
 		}
+
+		let physical_bounds = self.physical_bounds();
+		responses.add(FrontendMessage::UpdateViewportPhysicalBounds {
+			x: physical_bounds.x,
+			y: physical_bounds.y,
+			width: physical_bounds.width,
+			height: physical_bounds.height,
+		});
 
 		responses.add(NavigationMessage::CanvasPan { delta: DVec2::ZERO });
 		responses.add(NodeGraphMessage::SetGridAlignedEdges);
@@ -45,14 +52,6 @@ impl MessageHandler<ViewportMessage, ()> for ViewportMessageHandler {
 				}
 				.into(),
 			],
-		});
-
-		let physical_bounds = self.physical_bounds();
-		responses.add(FrontendMessage::UpdateViewportPhysicalBounds {
-			x: physical_bounds.x,
-			y: physical_bounds.y,
-			width: physical_bounds.width,
-			height: physical_bounds.height,
 		});
 	}
 

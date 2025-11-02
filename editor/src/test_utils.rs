@@ -1,7 +1,6 @@
 use crate::application::Editor;
 use crate::application::set_uuid_seed;
 use crate::messages::input_mapper::utility_types::input_keyboard::ModifierKeys;
-use crate::messages::input_mapper::utility_types::input_mouse::ViewportBounds;
 use crate::messages::input_mapper::utility_types::input_mouse::{EditorMouseState, MouseKeys, ScrollDelta, ViewportPosition};
 use crate::messages::portfolio::utility_types::Platform;
 use crate::messages::prelude::*;
@@ -48,7 +47,7 @@ impl EditorTestUtils {
 				Err(e) => return Err(format!("update_node_graph_instrumented failed\n\n{e}")),
 			};
 
-			if let Err(e) = exector.submit_current_node_graph_evaluation(document, DocumentId(0), Default::default(), Default::default()) {
+			if let Err(e) = exector.submit_current_node_graph_evaluation(document, DocumentId(0), UVec2::ONE, 1.0, Default::default()) {
 				return Err(format!("submit_current_node_graph_evaluation failed\n\n{e}"));
 			}
 			runtime.run().await;

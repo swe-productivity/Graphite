@@ -5,14 +5,8 @@ export function updateBoundsOfViewports(editor: Editor) {
 
 	if (viewports.length <= 0) return;
 
-	const viewportBounds = viewports[0].getBoundingClientRect();
-
-	const left = viewportBounds.left;
-	const top = viewportBounds.top;
-	const right = viewportBounds.right;
-	const bottom = viewportBounds.bottom;
-
+	const bounds = viewports[0].getBoundingClientRect();
 	const scale = window.devicePixelRatio || 1;
 
-	editor.handle.updateViewport(left, top, right, bottom, scale);
+	editor.handle.updateViewport(bounds.x, bounds.y, bounds.width, bounds.height, scale);
 }

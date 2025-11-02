@@ -209,7 +209,7 @@ async fn render<'a: 'n>(
 					surface_id: surface_handle.window_id,
 					// TODO: Find a cleaner way to get the unscaled resolution here.
 					// This is done because the surface frame (canvas) is in logical pixels, not physical pixels.
-					resolution: footprint.resolution,
+					resolution,
 					transform: glam::DAffine2::IDENTITY,
 				};
 

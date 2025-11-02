@@ -79,6 +79,9 @@ pub(super) fn intercept_frontend_message(dispatcher: &mut DesktopWrapperMessageD
 		FrontendMessage::TriggerMaximizeWindow => {
 			dispatcher.respond(DesktopFrontendMessage::MaximizeWindow);
 		}
+		FrontendMessage::UpdateViewportPhysicalBounds { x, y, width, height } => {
+			dispatcher.respond(DesktopFrontendMessage::UpdateViewportPhysicalBounds { x, y, width, height });
+		}
 		FrontendMessage::TriggerPersistenceWriteDocument { document_id, document, details } => {
 			dispatcher.respond(DesktopFrontendMessage::PersistenceWriteDocument {
 				id: document_id,

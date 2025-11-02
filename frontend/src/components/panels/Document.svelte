@@ -381,6 +381,23 @@
 		showTextInput = false;
 	}
 
+	function updateViewportInfo() {
+		if (!viewport) return;
+		// Resize the canvas
+		canvasSvgWidth = Math.ceil(parseFloat(getComputedStyle(viewport).width));
+		canvasSvgHeight = Math.ceil(parseFloat(getComputedStyle(viewport).height));
+
+		// Resize the rulers
+		rulerHorizontal?.resize();
+		rulerVertical?.resize();
+
+		// Send the new bounds of the viewports to the backend
+		if (viewport.parentElement) updateBoundsOfViewports(editor);
+
+		devicePixelRatio = window.devicePixelRatio;
+		editor.handle.updateViewportScale(devicePixelRatio);
+	}
+
 	onMount(() => {
 		// Not compatible with Safari:
 		// <https://developer.mozilla.org/en-US/docs/Web/API/Window/devicePixelRatio#browser_compatibility>
@@ -393,8 +410,7 @@
 			mediaQueryList.addEventListener("change", updatePixelRatio);
 			removeUpdatePixelRatio = () => mediaQueryList.removeEventListener("change", updatePixelRatio);
 
-			devicePixelRatio = window.devicePixelRatio;
-			editor.handle.updateViewportScale(devicePixelRatio);
+			updateViewportInfo();
 		};
 		updatePixelRatio();
 
@@ -462,18 +478,7 @@
 		window.dispatchEvent(new Event("resize"));
 
 		const viewportResizeObserver = new ResizeObserver(() => {
-			if (!viewport) return;
-
-			// Resize the canvas
-			canvasSvgWidth = Math.ceil(parseFloat(getComputedStyle(viewport).width));
-			canvasSvgHeight = Math.ceil(parseFloat(getComputedStyle(viewport).height));
-
-			// Resize the rulers
-			rulerHorizontal?.resize();
-			rulerVertical?.resize();
-
-			// Send the new bounds of the viewports to the backend
-			if (viewport.parentElement) updateBoundsOfViewports(editor);
+			updateViewportInfo();
 		});
 		if (viewport) viewportResizeObserver.observe(viewport);
 	});

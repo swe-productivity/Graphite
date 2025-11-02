@@ -150,16 +150,11 @@ impl App {
 					}
 				});
 			}
-			DesktopFrontendMessage::UpdateViewportBounds { x, y, width, height } => {
+			DesktopFrontendMessage::UpdateViewportPhysicalBounds { x, y, width, height } => {
 				if let Some(graphics_state) = &mut self.graphics_state
 					&& let Some(window) = &self.window
 				{
 					let window_size = window.surface_size();
-
-					let x = x * self.window_scale;
-					let y = y * self.window_scale;
-					let width = width * self.window_scale;
-					let height = height * self.window_scale;
 
 					let viewport_offset_x = x / window_size.width as f64;
 					let viewport_offset_y = y / window_size.height as f64;

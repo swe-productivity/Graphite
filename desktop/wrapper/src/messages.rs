@@ -25,7 +25,7 @@ pub enum DesktopFrontendMessage {
 		content: Vec<u8>,
 	},
 	OpenUrl(String),
-	UpdateViewportBounds {
+	UpdateViewportPhysicalBounds {
 		x: f64,
 		y: f64,
 		width: f64,

@@ -46,6 +46,14 @@ impl MessageHandler<ViewportMessage, ()> for ViewportMessageHandler {
 				.into(),
 			],
 		});
+
+		let physical_bounds = self.physical_bounds();
+		responses.add(FrontendMessage::UpdateViewportPhysicalBounds {
+			x: physical_bounds.x,
+			y: physical_bounds.y,
+			width: physical_bounds.width,
+			height: physical_bounds.height,
+		});
 	}
 
 	advertise_actions!(ViewportMessageDiscriminant;);

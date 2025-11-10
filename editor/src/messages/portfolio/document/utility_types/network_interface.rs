@@ -4603,35 +4603,36 @@ impl NodeNetworkInterface {
 
 			if !delete_children {
 				continue;
-			};
+			}
 
-			// Perform an upstream traversal to try delete children
+			// Perform an upstream traversal to try deleting children
 			for upstream_id in self.upstream_flow_back_from_nodes(vec![*node_id], network_path, FlowType::LayerChildrenUpstreamFlow) {
-				// For each potential child perform a complete downstream traveral, ending at either a node in the `delete_nodes` set, the output, or a dead end.
-				// If the output node is eventually reached, then it is not a sole dependent and will not be deleted
+				// For each potential child: perform a complete downstream traveral, ending at either a node in the `delete_nodes` set, the output, or a dead end.
+				// If the output node is eventually reached, then it is not a sole dependent and will not be deleted.
 				let mut stack = vec![OutputConnector::node(upstream_id, 0)];
 				let mut can_delete = true;
+
 				while let Some(current_node) = stack.pop() {
-					let current_node_id = current_node.node_id().expect("The current node in the delete stack cannot be the export");
 					let Some(downstream_nodes) = outward_wires.get(&current_node) else { continue };
+
 					// If there are no outward wires, then we have reached a dead end, and the node cannot be deleted
 					if downstream_nodes.is_empty() {
 						can_delete = false;
 						break;
 					}
+
 					for downstream_node in downstream_nodes {
-						if let InputConnector::Node { node_id: downstream_id, .. } = downstream_node {
-							// If the downstream node is not in the delete nodes set, then continue iterating
-							if !delete_nodes.contains(downstream_id) {
-								for output_index in 0..self.number_of_outputs(downstream_id, network_path) {
-									stack.push(OutputConnector::node(*downstream_id, output_index))
-								}
-							}
-						}
 						// If the traversal reaches the export, then the current node is not a sole dependent and cannot be deleted
-						else {
+						let InputConnector::Node { node_id: downstream_id, .. } = downstream_node else {
 							can_delete = false;
 							break;
+						};
+
+						// If the downstream node is not in the `delete_nodes` set, then continue iterating
+						if !delete_nodes.contains(downstream_id) {
+							for output_index in 0..self.number_of_outputs(downstream_id, network_path) {
+								stack.push(OutputConnector::node(*downstream_id, output_index));
+							}
 						}
 					}
 				}

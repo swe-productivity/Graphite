@@ -13,6 +13,7 @@ impl super::NativeWindow for NativeWindowImpl {
 			let icon = winit::icon::Icon(std::sync::Arc::new(win_icon));
 			attributes.with_window_icon(Some(icon))
 		} else {
+			tracing::warn("Failed to load icon from resource");
 			attributes
 		}
 	}

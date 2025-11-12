@@ -2364,6 +2364,7 @@ name = "graphite-desktop-platform-win"
 version = "0.0.0"
 dependencies = [
  "graphite-desktop",
+ "windows",
  "winres",
 ]
 

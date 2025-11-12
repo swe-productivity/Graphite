@@ -70,6 +70,17 @@ impl ContextBuilder {
 	fn build_instance(&self) -> Instance {
 		Instance::new(&wgpu::InstanceDescriptor {
 			backends: self.backends,
+			backend_options: wgpu::BackendOptions {
+				dx12: wgpu::Dx12BackendOptions {
+					shader_compiler: wgpu::Dx12Compiler::DynamicDxc {
+						dxc_path: "dxcompiler.dll".to_string(),
+						max_shader_model: wgpu::DxcShaderModel::V6_7,
+					},
+					// shader_compiler: wgpu::Dx12Compiler::StaticDxc,
+					..Default::default()
+				},
+				..Default::default()
+			},
 			..Default::default()
 		})
 	}
@@ -84,7 +95,7 @@ impl ContextBuilder {
 	async fn request_device(&self, adapter: &Adapter) -> Option<(Device, Queue)> {
 		let device_descriptor = wgpu::DeviceDescriptor {
 			label: None,
-			required_features: self.features,
+			required_features: self.features, // | wgpu::Features::VULKAN_EXTERNAL_MEMORY_WIN32,
 			required_limits: adapter.limits(),
 			memory_hints: Default::default(),
 			trace: wgpu::Trace::Off,

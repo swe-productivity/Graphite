@@ -7,6 +7,8 @@ use crate::messages::animation::TimingInformation;
 use crate::messages::debug::utility_types::MessageLoggingVerbosity;
 use crate::messages::dialog::simple_dialogs;
 use crate::messages::frontend::utility_types::{DocumentDetails, OpenDocument};
+use crate::messages::input_mapper::utility_types::input_keyboard::Key;
+use crate::messages::input_mapper::utility_types::macros::{action_shortcut, action_shortcut_manual};
 use crate::messages::layout::utility_types::widget_prelude::*;
 use crate::messages::portfolio::document::DocumentMessageContext;
 use crate::messages::portfolio::document::graph_operation::utility_types::TransformIn;
@@ -20,7 +22,7 @@ use crate::messages::preferences::SelectionMode;
 use crate::messages::prelude::*;
 use crate::messages::tool::common_functionality::graph_modification_utils;
 use crate::messages::tool::common_functionality::utility_functions::make_path_editable_is_allowed;
-use crate::messages::tool::utility_types::{HintData, HintGroup, ToolType};
+use crate::messages::tool::utility_types::{HintData, ToolType};
 use crate::messages::viewport::ToPhysical;
 use crate::node_graph_executor::{ExportConfig, NodeGraphExecutor};
 use derivative::*;
@@ -153,6 +155,17 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 					node_types: document_node_definitions::collect_node_types(),
 				});
 
+				// Send shortcuts for widgets created in the frontend which need shortcut tooltips
+				responses.add(FrontendMessage::SendShortcutF11 {
+					shortcut: action_shortcut_manual!(Key::F11),
+				});
+				responses.add(FrontendMessage::SendShortcutAltClick {
+					shortcut: action_shortcut_manual!(Key::Alt, Key::MouseLeft),
+				});
+
+				// Before loading any documents, initially prepare the welcome screen buttons layout
+				responses.add(PortfolioMessage::RequestWelcomeScreenButtonsLayout);
+
 				// Tell frontend to finish loading persistent documents
 				responses.add(FrontendMessage::TriggerLoadRestAutoSaveDocuments);
 
@@ -218,8 +231,7 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 					responses.add(PropertiesPanelMessage::Clear);
 					responses.add(DocumentMessage::ClearLayersPanel);
 					responses.add(DataPanelMessage::ClearLayout);
-					let hint_data = HintData(vec![HintGroup(vec![])]);
-					responses.add(FrontendMessage::UpdateInputHints { hint_data });
+					HintData::clear_layout(responses);
 				}
 
 				for document_id in &self.document_ids {
@@ -243,8 +255,7 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 					responses.add(PropertiesPanelMessage::Clear);
 					responses.add(DocumentMessage::ClearLayersPanel);
 					responses.add(DataPanelMessage::ClearLayout);
-					let hint_data = HintData(vec![HintGroup(vec![])]);
-					responses.add(FrontendMessage::UpdateInputHints { hint_data });
+					HintData::clear_layout(responses);
 				}
 
 				// Actually delete the document (delay to delete document is required to let the document and properties panel messages above get processed)
@@ -882,6 +893,53 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 					responses.add(PortfolioMessage::SelectDocument { document_id: prev_id });
 				}
 			}
+			PortfolioMessage::RequestWelcomeScreenButtonsLayout => {
+				let donate = "https://graphite.art/donate/";
+
+				let table = LayoutGroup::Table {
+					unstyled: true,
+					rows: vec![
+						vec![
+							TextButton::new("New Document")
+								.icon(Some("File".into()))
+								.flush(true)
+								.on_commit(|_| DialogMessage::RequestNewDocumentDialog.into())
+								.widget_instance(),
+							ShortcutLabel::new(action_shortcut!(DialogMessageDiscriminant::RequestNewDocumentDialog)).widget_instance(),
+						],
+						vec![
+							TextButton::new("Open Document")
+								.icon(Some("Folder".into()))
+								.flush(true)
+								.on_commit(|_| PortfolioMessage::OpenDocument.into())
+								.widget_instance(),
+							ShortcutLabel::new(action_shortcut!(PortfolioMessageDiscriminant::OpenDocument)).widget_instance(),
+						],
+						vec![
+							TextButton::new("Open Demo Artwork")
+								.icon(Some("Image".into()))
+								.flush(true)
+								.on_commit(|_| DialogMessage::RequestDemoArtworkDialog.into())
+								.widget_instance(),
+						],
+						vec![
+							TextButton::new("Support the Development Fund")
+								.icon(Some("Heart".into()))
+								.flush(true)
+								.on_commit(move |_| FrontendMessage::TriggerVisitLink { url: donate.to_string() }.into())
+								.widget_instance(),
+						],
+					],
+				};
+
+				responses.add(LayoutMessage::DestroyLayout {
+					layout_target: LayoutTarget::WelcomeScreenButtons,
+				});
+				responses.add(LayoutMessage::SendLayout {
+					layout: Layout(vec![table]),
+					layout_target: LayoutTarget::WelcomeScreenButtons,
+				});
+			}
 			PortfolioMessage::SetActivePanel { panel } => {
 				self.active_panel = panel;
 				responses.add(DocumentMessage::SetActivePanel { active_panel: self.active_panel });
@@ -1071,7 +1129,14 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 						})
 					})
 					.collect::<Vec<_>>();
+
+				let no_open_documents = open_documents.is_empty();
+
 				responses.add(FrontendMessage::UpdateOpenDocumentsList { open_documents });
+
+				if no_open_documents {
+					responses.add(PortfolioMessage::RequestWelcomeScreenButtonsLayout);
+				}
 			}
 			PortfolioMessage::UpdateVelloPreference => {
 				let active = if cfg!(target_family = "wasm") { false } else { preferences.use_vello };

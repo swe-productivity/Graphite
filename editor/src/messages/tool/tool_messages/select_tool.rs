@@ -131,7 +131,7 @@ impl ToolMetadata for SelectTool {
 }
 
 impl SelectTool {
-	fn deep_selection_widget(&self) -> WidgetHolder {
+	fn deep_selection_widget(&self) -> WidgetInstance {
 		let layer_selection_behavior_entries = [NestedSelectionBehavior::Shallowest, NestedSelectionBehavior::Deepest]
 			.iter()
 			.map(|mode| {
@@ -151,10 +151,10 @@ impl SelectTool {
 				"Shallow Select: clicks initially select the least-nested layers and double clicks drill deeper into the folder hierarchy.\n\
 				Deep Select: clicks directly select the most-nested layers in the folder hierarchy.",
 			)
-			.widget_holder()
+			.widget_instance()
 	}
 
-	fn alignment_widgets(&self, disabled: bool) -> impl Iterator<Item = WidgetHolder> + use<> {
+	fn alignment_widgets(&self, disabled: bool) -> impl Iterator<Item = WidgetInstance> + use<> {
 		[AlignAxis::X, AlignAxis::Y]
 			.into_iter()
 			.flat_map(|axis| [(axis, AlignAggregate::Min), (axis, AlignAggregate::Center), (axis, AlignAggregate::Max)])
@@ -171,11 +171,11 @@ impl SelectTool {
 					.tooltip_label(label)
 					.on_update(move |_| DocumentMessage::AlignSelectedLayers { axis, aggregate }.into())
 					.disabled(disabled)
-					.widget_holder()
+					.widget_instance()
 			})
 	}
 
-	fn flip_widgets(&self, disabled: bool) -> impl Iterator<Item = WidgetHolder> + use<> {
+	fn flip_widgets(&self, disabled: bool) -> impl Iterator<Item = WidgetInstance> + use<> {
 		[(FlipAxis::X, "FlipHorizontal", "Flip Horizontal"), (FlipAxis::Y, "FlipVertical", "Flip Vertical")]
 			.into_iter()
 			.map(move |(flip_axis, icon, label)| {
@@ -183,11 +183,11 @@ impl SelectTool {
 					.tooltip_label(label)
 					.on_update(move |_| DocumentMessage::FlipSelectedLayers { flip_axis }.into())
 					.disabled(disabled)
-					.widget_holder()
+					.widget_instance()
 			})
 	}
 
-	fn turn_widgets(&self, disabled: bool) -> impl Iterator<Item = WidgetHolder> + use<> {
+	fn turn_widgets(&self, disabled: bool) -> impl Iterator<Item = WidgetInstance> + use<> {
 		[(-90., "TurnNegative90", "Turn -90°"), (90., "TurnPositive90", "Turn 90°")]
 			.into_iter()
 			.map(move |(degrees, icon, label)| {
@@ -195,11 +195,11 @@ impl SelectTool {
 					.tooltip_label(label)
 					.on_update(move |_| DocumentMessage::RotateSelectedLayers { degrees }.into())
 					.disabled(disabled)
-					.widget_holder()
+					.widget_instance()
 			})
 	}
 
-	fn boolean_widgets(&self, selected_count: usize) -> impl Iterator<Item = WidgetHolder> + use<> {
+	fn boolean_widgets(&self, selected_count: usize) -> impl Iterator<Item = WidgetInstance> + use<> {
 		let list = <BooleanOperation as graphene_std::choice_type::ChoiceTypeStatic>::list();
 		list.iter().flat_map(|i| i.iter()).map(move |(operation, info)| {
 			IconButton::new(info.icon.unwrap(), 24)
@@ -210,7 +210,7 @@ impl SelectTool {
 					let group_folder_type = GroupFolderType::BooleanOperation(*operation);
 					DocumentMessage::GroupSelectedLayers { group_folder_type }.into()
 				})
-				.widget_holder()
+				.widget_instance()
 		})
 	}
 }
@@ -223,12 +223,12 @@ impl LayoutHolder for SelectTool {
 		widgets.push(self.deep_selection_widget());
 
 		// Pivot gizmo type (checkbox + dropdown for pivot/origin)
-		widgets.push(Separator::new(SeparatorType::Unrelated).widget_holder());
+		widgets.push(Separator::new(SeparatorType::Unrelated).widget_instance());
 		widgets.extend(pivot_gizmo_type_widget(self.tool_data.pivot_gizmo.state, PivotToolSource::Select));
 
 		if self.tool_data.pivot_gizmo.state.is_pivot_type() {
 			// Nine-position reference point widget
-			widgets.push(Separator::new(SeparatorType::Related).widget_holder());
+			widgets.push(Separator::new(SeparatorType::Related).widget_instance());
 			widgets.push(pivot_reference_point_widget(
 				self.tool_data.selected_layers_count == 0 || !self.tool_data.pivot_gizmo.state.is_pivot(),
 				self.tool_data.pivot_gizmo.pivot.to_pivot_position(),
@@ -236,7 +236,7 @@ impl LayoutHolder for SelectTool {
 			));
 
 			// Pivot pin button
-			widgets.push(Separator::new(SeparatorType::Related).widget_holder());
+			widgets.push(Separator::new(SeparatorType::Related).widget_instance());
 
 			let pin_active = self.tool_data.pivot_gizmo.pin_active();
 			let pin_enabled = self.tool_data.pivot_gizmo.pivot.old_pivot_position == ReferencePoint::None && !self.tool_data.pivot_gizmo.state.disabled;
@@ -248,36 +248,23 @@ impl LayoutHolder for SelectTool {
 
 		// Align
 		let disabled = self.tool_data.selected_layers_count < 2;
-		widgets.push(Separator::new(SeparatorType::Unrelated).widget_holder());
+		widgets.push(Separator::new(SeparatorType::Unrelated).widget_instance());
 		widgets.extend(self.alignment_widgets(disabled));
-		// widgets.push(
-		// 	PopoverButton::new()
-		// 		.popover_layout(vec![
-		// 			LayoutGroup::Row {
-		// 				widgets: vec![TextLabel::new("Align").bold(true).widget_holder()],
-		// 			},
-		// 			LayoutGroup::Row {
-		// 				widgets: vec![TextLabel::new("Coming soon").widget_holder()],
-		// 			},
-		// 		])
-		// 		.disabled(disabled)
-		// 		.widget_holder(),
-		// );
 
 		// Flip
 		let disabled = self.tool_data.selected_layers_count == 0;
-		widgets.push(Separator::new(SeparatorType::Unrelated).widget_holder());
+		widgets.push(Separator::new(SeparatorType::Unrelated).widget_instance());
 		widgets.extend(self.flip_widgets(disabled));
 
 		// Turn
-		widgets.push(Separator::new(SeparatorType::Unrelated).widget_holder());
+		widgets.push(Separator::new(SeparatorType::Unrelated).widget_instance());
 		widgets.extend(self.turn_widgets(disabled));
 
 		// Boolean
-		widgets.push(Separator::new(SeparatorType::Unrelated).widget_holder());
+		widgets.push(Separator::new(SeparatorType::Unrelated).widget_instance());
 		widgets.extend(self.boolean_widgets(self.tool_data.selected_layers_count));
 
-		Layout::WidgetLayout(WidgetLayout::new(vec![LayoutGroup::Row { widgets }]))
+		Layout(vec![LayoutGroup::Row { widgets }])
 	}
 }
 
@@ -1728,7 +1715,7 @@ impl Fsm for SelectToolFsmState {
 						HintInfo::keys([Key::Control, Key::KeyD], "Duplicate").add_mac_keys([Key::Command, Key::KeyD]),
 					]),
 				]);
-				responses.add(FrontendMessage::UpdateInputHints { hint_data });
+				hint_data.send_layout(responses);
 			}
 			SelectToolFsmState::Dragging { axis, using_compass, has_dragged, .. } if *has_dragged => {
 				let mut hint_data = vec![
@@ -1743,7 +1730,7 @@ impl Fsm for SelectToolFsmState {
 					hint_data.push(HintGroup(vec![HintInfo::keys([Key::Shift], "Constrain to Axis")]));
 				};
 				let hint_data = HintData(hint_data);
-				responses.add(FrontendMessage::UpdateInputHints { hint_data });
+				hint_data.send_layout(responses);
 			}
 			SelectToolFsmState::Drawing { has_drawn, .. } if *has_drawn => {
 				let hint_data = HintData(vec![
@@ -1753,7 +1740,7 @@ impl Fsm for SelectToolFsmState {
 					// TODO: (See https://discord.com/channels/731730685944922173/1216976541947531264/1321360311298818048)
 					// HintGroup(vec![HintInfo::keys([Key::Shift], "Extend")])
 				]);
-				responses.add(FrontendMessage::UpdateInputHints { hint_data });
+				hint_data.send_layout(responses);
 			}
 			SelectToolFsmState::Drawing { .. } | SelectToolFsmState::Dragging { .. } => {}
 			SelectToolFsmState::ResizingBounds => {
@@ -1761,25 +1748,25 @@ impl Fsm for SelectToolFsmState {
 					HintGroup(vec![HintInfo::mouse(MouseMotion::Rmb, ""), HintInfo::keys([Key::Escape], "Cancel").prepend_slash()]),
 					HintGroup(vec![HintInfo::keys([Key::Alt], "From Pivot"), HintInfo::keys([Key::Shift], "Preserve Aspect Ratio")]),
 				]);
-				responses.add(FrontendMessage::UpdateInputHints { hint_data });
+				hint_data.send_layout(responses);
 			}
 			SelectToolFsmState::RotatingBounds => {
 				let hint_data = HintData(vec![
 					HintGroup(vec![HintInfo::mouse(MouseMotion::Rmb, ""), HintInfo::keys([Key::Escape], "Cancel").prepend_slash()]),
 					HintGroup(vec![HintInfo::keys([Key::Shift], "15° Increments")]),
 				]);
-				responses.add(FrontendMessage::UpdateInputHints { hint_data });
+				hint_data.send_layout(responses);
 			}
 			SelectToolFsmState::SkewingBounds { .. } => {
 				let hint_data = HintData(vec![
 					HintGroup(vec![HintInfo::mouse(MouseMotion::Rmb, ""), HintInfo::keys([Key::Escape], "Cancel").prepend_slash()]),
 					HintGroup(vec![HintInfo::keys([Key::Control], "Unlock Slide")]),
 				]);
-				responses.add(FrontendMessage::UpdateInputHints { hint_data });
+				hint_data.send_layout(responses);
 			}
 			SelectToolFsmState::DraggingPivot => {
 				let hint_data = HintData(vec![HintGroup(vec![HintInfo::mouse(MouseMotion::Rmb, ""), HintInfo::keys([Key::Escape], "Cancel").prepend_slash()])]);
-				responses.add(FrontendMessage::UpdateInputHints { hint_data });
+				hint_data.send_layout(responses);
 			}
 		}
 	}

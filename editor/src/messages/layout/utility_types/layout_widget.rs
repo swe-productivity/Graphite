@@ -1,10 +1,8 @@
 use super::widgets::button_widgets::*;
 use super::widgets::input_widgets::*;
 use super::widgets::label_widgets::*;
-use super::widgets::menu_widgets::MenuLayout;
 use crate::application::generate_uuid;
 use crate::messages::input_mapper::utility_types::input_keyboard::KeysGroup;
-use crate::messages::input_mapper::utility_types::misc::ActionKeys;
 use crate::messages::prelude::*;
 use std::sync::Arc;
 
@@ -21,6 +19,8 @@ impl core::fmt::Display for WidgetId {
 #[derive(PartialEq, Clone, Debug, Hash, Eq, Copy, serde::Serialize, serde::Deserialize, specta::Type)]
 #[repr(u8)]
 pub enum LayoutTarget {
+	/// The spreadsheet panel allows for the visualisation of data in the graph.
+	DataPanel,
 	/// Contains the action buttons at the bottom of the dialog. Must be shown with the `FrontendMessage::DisplayDialog` message.
 	DialogButtons,
 	/// Contains the contents of the dialog's primary column. Must be shown with the `FrontendMessage::DisplayDialog` message.
@@ -29,32 +29,32 @@ pub enum LayoutTarget {
 	DialogColumn2,
 	/// Contains the widgets located directly above the canvas to the right, for example the zoom in and out buttons.
 	DocumentBar,
-	/// Contains the dropdown for design / select / guide mode found on the top left of the canvas.
-	DocumentMode,
+	/// Controls for adding, grouping, and deleting layers at the bottom of the Layers panel.
+	LayersPanelBottomBar,
 	/// Blending options at the top of the Layers panel.
 	LayersPanelControlLeftBar,
 	/// Selected layer status (locked/hidden) at the top of the Layers panel.
 	LayersPanelControlRightBar,
-	/// Controls for adding, grouping, and deleting layers at the bottom of the Layers panel.
-	LayersPanelBottomBar,
 	/// The dropdown menu at the very top of the application: File, Edit, etc.
 	MenuBar,
 	/// Bar at the top of the node graph containing the location and the "Preview" and "Hide" buttons.
 	NodeGraphControlBar,
 	/// The body of the Properties panel containing many collapsable sections.
 	PropertiesPanel,
-	/// The spredsheet panel allows for the visualisation of data in the graph.
-	DataPanel,
-	/// The bar directly above the canvas, left-aligned and to the right of the document mode dropdown.
+	/// The contextual input key/mouse combination shortcuts shown in the status bar at the bottom of the window.
+	StatusBarHints,
+	/// The left side of the control bar directly above the canvas.
 	ToolOptions,
 	/// The vertical buttons for all of the tools on the left of the canvas.
 	ToolShelf,
+	/// The quick access buttons found on the welcome screen, shown when no documents are open.
+	WelcomeScreenButtons,
 	/// The color swatch for the working colors and a flip and reset button found at the bottom of the tool shelf.
 	WorkingColors,
 
 	// KEEP THIS ENUM LAST
 	// This is a marker that is used to define an array that is used to hold widgets
-	LayoutTargetLength,
+	_LayoutTargetLength,
 }
 
 /// For use by structs that define a UI widget layout by implementing the layout() function belonging to this trait.
@@ -101,84 +101,21 @@ pub trait DialogLayoutHolder: LayoutHolder {
 	}
 }
 
-/// Wraps a choice of layout type. The chosen layout contains an arrangement of widgets mounted somewhere specific in the frontend.
-#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
-pub enum Layout {
-	WidgetLayout(WidgetLayout),
-	MenuLayout(MenuLayout),
-}
+/// Contains an arrangement of widgets mounted somewhere specific in the frontend.
+#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize, PartialEq, specta::Type)]
+pub struct Layout(pub Vec<LayoutGroup>);
 
 impl Layout {
-	pub fn as_menu_layout(self, action_input_mapping: &impl Fn(&MessageDiscriminant) -> Option<KeysGroup>) -> Option<MenuLayout> {
-		if let Self::MenuLayout(mut menu) = self {
-			menu.layout
-				.iter_mut()
-				.for_each(|menu_column| menu_column.children.fill_in_shortcut_actions_with_keys(action_input_mapping));
-			Some(menu)
-		} else {
-			None
-		}
-	}
-
-	pub fn iter(&self) -> Box<dyn Iterator<Item = &WidgetHolder> + '_> {
-		match self {
-			Layout::MenuLayout(menu_layout) => Box::new(menu_layout.iter()),
-			Layout::WidgetLayout(widget_layout) => Box::new(widget_layout.iter()),
-		}
-	}
-
-	pub fn iter_mut(&mut self) -> Box<dyn Iterator<Item = &mut WidgetHolder> + '_> {
-		match self {
-			Layout::MenuLayout(menu_layout) => Box::new(menu_layout.iter_mut()),
-			Layout::WidgetLayout(widget_layout) => Box::new(widget_layout.iter_mut()),
-		}
-	}
-
-	/// Diffing updates self (where self is old) based on new, updating the list of modifications as it does so.
-	pub fn diff(&mut self, new: Self, widget_path: &mut Vec<usize>, widget_diffs: &mut Vec<WidgetDiff>) {
-		match (self, new) {
-			// Simply diff the internal layout
-			(Self::WidgetLayout(current), Self::WidgetLayout(new)) => current.diff(new, widget_path, widget_diffs),
-			(current, Self::WidgetLayout(widget_layout)) => {
-				// Update current to the new value
-				*current = Self::WidgetLayout(widget_layout.clone());
-
-				// Push an update sublayout value
-				let new_value = DiffUpdate::SubLayout(widget_layout.layout);
-				let widget_path = widget_path.to_vec();
-				widget_diffs.push(WidgetDiff { widget_path, new_value });
-			}
-			(_, Self::MenuLayout(_)) => panic!("Cannot diff menu layout"),
-		}
-	}
-}
-
-impl Default for Layout {
-	fn default() -> Self {
-		Self::WidgetLayout(WidgetLayout::default())
-	}
-}
-
-#[derive(Debug, Default, Clone, serde::Serialize, serde::Deserialize, PartialEq, specta::Type)]
-pub struct WidgetLayout {
-	pub layout: SubLayout,
-}
-
-impl WidgetLayout {
-	pub fn new(layout: SubLayout) -> Self {
-		Self { layout }
-	}
-
 	pub fn iter(&self) -> WidgetIter<'_> {
 		WidgetIter {
-			stack: self.layout.iter().collect(),
+			stack: self.0.iter().collect(),
 			..Default::default()
 		}
 	}
 
 	pub fn iter_mut(&mut self) -> WidgetIterMut<'_> {
 		WidgetIterMut {
-			stack: self.layout.iter_mut().collect(),
+			stack: self.0.iter_mut().collect(),
 			..Default::default()
 		}
 	}
@@ -187,12 +124,12 @@ impl WidgetLayout {
 	pub fn diff(&mut self, new: Self, widget_path: &mut Vec<usize>, widget_diffs: &mut Vec<WidgetDiff>) {
 		// Check if the length of items is different
 		// TODO: Diff insersion and deletion of items
-		if self.layout.len() != new.layout.len() {
+		if self.0.len() != new.0.len() {
 			// Update the layout to the new layout
-			self.layout.clone_from(&new.layout);
+			self.0.clone_from(&new.0);
 
 			// Push an update sublayout to the diff
-			let new = DiffUpdate::SubLayout(new.layout);
+			let new = DiffUpdate::Layout(new);
 			widget_diffs.push(WidgetDiff {
 				widget_path: widget_path.to_vec(),
 				new_value: new,
@@ -200,7 +137,7 @@ impl WidgetLayout {
 			return;
 		}
 		// Diff all of the children
-		for (index, (current_child, new_child)) in self.layout.iter_mut().zip(new.layout).enumerate() {
+		for (index, (current_child, new_child)) in self.0.iter_mut().zip(new.0).enumerate() {
 			widget_path.push(index);
 			current_child.diff(new_child, widget_path, widget_diffs);
 			widget_path.pop();
@@ -211,12 +148,12 @@ impl WidgetLayout {
 #[derive(Debug, Default)]
 pub struct WidgetIter<'a> {
 	pub stack: Vec<&'a LayoutGroup>,
-	pub table: Vec<&'a WidgetHolder>,
-	pub current_slice: Option<&'a [WidgetHolder]>,
+	pub table: Vec<&'a WidgetInstance>,
+	pub current_slice: Option<&'a [WidgetInstance]>,
 }
 
 impl<'a> Iterator for WidgetIter<'a> {
-	type Item = &'a WidgetHolder;
+	type Item = &'a WidgetInstance;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		let widget = self.table.pop().or_else(|| {
@@ -226,8 +163,8 @@ impl<'a> Iterator for WidgetIter<'a> {
 		});
 
 		if let Some(item) = widget {
-			if let WidgetHolder { widget: Widget::PopoverButton(p), .. } = item {
-				self.stack.extend(p.popover_layout.iter());
+			if let WidgetInstance { widget: Widget::PopoverButton(p), .. } = item {
+				self.stack.extend(p.popover_layout.0.iter());
 				return self.next();
 			}
 
@@ -243,12 +180,12 @@ impl<'a> Iterator for WidgetIter<'a> {
 				self.current_slice = Some(widgets);
 				self.next()
 			}
-			Some(LayoutGroup::Table { rows }) => {
+			Some(LayoutGroup::Table { rows, .. }) => {
 				self.table.extend(rows.iter().flatten().rev());
 				self.next()
 			}
 			Some(LayoutGroup::Section { layout, .. }) => {
-				for layout_row in layout {
+				for layout_row in &layout.0 {
 					self.stack.push(layout_row);
 				}
 				self.next()
@@ -261,12 +198,12 @@ impl<'a> Iterator for WidgetIter<'a> {
 #[derive(Debug, Default)]
 pub struct WidgetIterMut<'a> {
 	pub stack: Vec<&'a mut LayoutGroup>,
-	pub table: Vec<&'a mut WidgetHolder>,
-	pub current_slice: Option<&'a mut [WidgetHolder]>,
+	pub table: Vec<&'a mut WidgetInstance>,
+	pub current_slice: Option<&'a mut [WidgetInstance]>,
 }
 
 impl<'a> Iterator for WidgetIterMut<'a> {
-	type Item = &'a mut WidgetHolder;
+	type Item = &'a mut WidgetInstance;
 
 	fn next(&mut self) -> Option<Self::Item> {
 		let widget = self.table.pop().or_else(|| {
@@ -276,8 +213,8 @@ impl<'a> Iterator for WidgetIterMut<'a> {
 		});
 
 		if let Some(widget) = widget {
-			if let WidgetHolder { widget: Widget::PopoverButton(p), .. } = widget {
-				self.stack.extend(p.popover_layout.iter_mut());
+			if let WidgetInstance { widget: Widget::PopoverButton(p), .. } = widget {
+				self.stack.extend(p.popover_layout.0.iter_mut());
 				return self.next();
 			}
 
@@ -293,12 +230,12 @@ impl<'a> Iterator for WidgetIterMut<'a> {
 				self.current_slice = Some(widgets);
 				self.next()
 			}
-			Some(LayoutGroup::Table { rows }) => {
+			Some(LayoutGroup::Table { rows, .. }) => {
 				self.table.extend(rows.iter_mut().flatten().rev());
 				self.next()
 			}
 			Some(LayoutGroup::Section { layout, .. }) => {
-				for layout_row in layout {
+				for layout_row in &mut layout.0 {
 					self.stack.push(layout_row);
 				}
 				self.next()
@@ -308,26 +245,24 @@ impl<'a> Iterator for WidgetIterMut<'a> {
 	}
 }
 
-pub type SubLayout = Vec<LayoutGroup>;
-
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize, specta::Type)]
 pub enum LayoutGroup {
 	#[serde(rename = "column")]
 	Column {
 		#[serde(rename = "columnWidgets")]
-		widgets: Vec<WidgetHolder>,
+		widgets: Vec<WidgetInstance>,
 	},
 	#[serde(rename = "row")]
 	Row {
 		#[serde(rename = "rowWidgets")]
-		widgets: Vec<WidgetHolder>,
+		widgets: Vec<WidgetInstance>,
 	},
 	#[serde(rename = "table")]
 	Table {
 		#[serde(rename = "tableWidgets")]
-		rows: Vec<Vec<WidgetHolder>>,
+		rows: Vec<Vec<WidgetInstance>>,
+		unstyled: bool,
 	},
-	// TODO: Move this from being a child of `enum LayoutGroup` to being a child of `enum Layout`
 	#[serde(rename = "section")]
 	Section {
 		name: String,
@@ -335,7 +270,7 @@ pub enum LayoutGroup {
 		visible: bool,
 		pinned: bool,
 		id: u64,
-		layout: SubLayout,
+		layout: Layout,
 	},
 }
 
@@ -344,8 +279,8 @@ impl Default for LayoutGroup {
 		Self::Row { widgets: Vec::new() }
 	}
 }
-impl From<Vec<WidgetHolder>> for LayoutGroup {
-	fn from(widgets: Vec<WidgetHolder>) -> LayoutGroup {
+impl From<Vec<WidgetInstance>> for LayoutGroup {
+	fn from(widgets: Vec<WidgetInstance>) -> LayoutGroup {
 		LayoutGroup::Row { widgets }
 	}
 }
@@ -378,7 +313,7 @@ impl LayoutGroup {
 				Widget::TextInput(x) => &mut x.tooltip_label,
 				Widget::TextLabel(x) => &mut x.tooltip_label,
 				Widget::BreadcrumbTrailButtons(x) => &mut x.tooltip_label,
-				Widget::InvisibleStandinInput(_) | Widget::ReferencePointInput(_) | Widget::RadioInput(_) | Widget::Separator(_) | Widget::WorkingColorsInput(_) | Widget::NodeCatalog(_) => continue,
+				Widget::ReferencePointInput(_) | Widget::RadioInput(_) | Widget::Separator(_) | Widget::ShortcutLabel(_) | Widget::WorkingColorsInput(_) | Widget::NodeCatalog(_) => continue,
 			};
 			if val.is_empty() {
 				val.clone_from(&label);
@@ -414,7 +349,7 @@ impl LayoutGroup {
 				Widget::TextInput(x) => &mut x.tooltip_description,
 				Widget::TextLabel(x) => &mut x.tooltip_description,
 				Widget::BreadcrumbTrailButtons(x) => &mut x.tooltip_description,
-				Widget::InvisibleStandinInput(_) | Widget::ReferencePointInput(_) | Widget::RadioInput(_) | Widget::Separator(_) | Widget::WorkingColorsInput(_) | Widget::NodeCatalog(_) => continue,
+				Widget::ReferencePointInput(_) | Widget::RadioInput(_) | Widget::Separator(_) | Widget::ShortcutLabel(_) | Widget::WorkingColorsInput(_) | Widget::NodeCatalog(_) => continue,
 			};
 			if val.is_empty() {
 				val.clone_from(&description);
@@ -467,7 +402,7 @@ impl LayoutGroup {
 			) => {
 				// Resend the entire panel if the lengths, names, visibility, or node IDs are different
 				// TODO: Diff insersion and deletion of items
-				if current_layout.len() != new_layout.len()
+				if current_layout.0.len() != new_layout.0.len()
 					|| *current_name != new_name
 					|| *current_description != new_description
 					|| *current_visible != new_visible
@@ -496,7 +431,7 @@ impl LayoutGroup {
 				}
 				// Diff all of the children
 				else {
-					for (index, (current_child, new_child)) in current_layout.iter_mut().zip(new_layout).enumerate() {
+					for (index, (current_child, new_child)) in current_layout.0.iter_mut().zip(new_layout.0).enumerate() {
 						widget_path.push(index);
 						current_child.diff(new_child, widget_path, widget_diffs);
 						widget_path.pop();
@@ -521,20 +456,20 @@ impl LayoutGroup {
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, specta::Type)]
-pub struct WidgetHolder {
+pub struct WidgetInstance {
 	#[serde(rename = "widgetId")]
 	pub widget_id: WidgetId,
 	pub widget: Widget,
 }
 
-impl PartialEq for WidgetHolder {
+impl PartialEq for WidgetInstance {
 	fn eq(&self, other: &Self) -> bool {
 		self.widget == other.widget
 	}
 }
 
-impl WidgetHolder {
-	#[deprecated(since = "0.0.0", note = "Please use the builder pattern, e.g. TextLabel::new(\"hello\").widget_holder()")]
+impl WidgetInstance {
+	#[deprecated(since = "0.0.0", note = "Please use the builder pattern, e.g. TextLabel::new(\"hello\").widget_instance()")]
 	pub fn new(widget: Widget) -> Self {
 		Self {
 			widget_id: WidgetId(generate_uuid()),
@@ -551,11 +486,11 @@ impl WidgetHolder {
 			&& button1.icon == button2.icon
 			&& button1.tooltip_label == button2.tooltip_label
 			&& button1.tooltip_description == button2.tooltip_description
-			&& button1.shortcut_keys == button2.shortcut_keys
+			&& button1.tooltip_shortcut == button2.tooltip_shortcut
 			&& button1.popover_min_width == button2.popover_min_width
 		{
 			let mut new_widget_path = widget_path.to_vec();
-			for (i, (a, b)) in button1.popover_layout.iter_mut().zip(button2.popover_layout.iter()).enumerate() {
+			for (i, (a, b)) in button1.popover_layout.0.iter_mut().zip(button2.popover_layout.0.iter()).enumerate() {
 				new_widget_path.push(i);
 				a.diff(b.clone(), &mut new_widget_path, widget_diffs);
 				new_widget_path.pop();
@@ -609,7 +544,7 @@ pub enum Widget {
 	IconLabel(IconLabel),
 	ImageButton(ImageButton),
 	ImageLabel(ImageLabel),
-	InvisibleStandinInput(InvisibleStandinInput),
+	ShortcutLabel(ShortcutLabel),
 	NodeCatalog(NodeCatalog),
 	NumberInput(NumberInput),
 	ParameterExposeButton(ParameterExposeButton),
@@ -638,49 +573,38 @@ pub struct WidgetDiff {
 }
 
 /// The new value of the UI, sent as part of a diff.
-///
-/// An update can represent a single widget or an entire SubLayout, or just a single layout group.
 #[derive(PartialEq, Clone, Debug, serde::Serialize, serde::Deserialize, specta::Type)]
 pub enum DiffUpdate {
-	#[serde(rename = "subLayout")]
-	SubLayout(SubLayout),
+	#[serde(rename = "layout")]
+	Layout(Layout),
 	#[serde(rename = "layoutGroup")]
 	LayoutGroup(LayoutGroup),
 	#[serde(rename = "widget")]
-	Widget(WidgetHolder),
+	Widget(WidgetInstance),
 }
 
 impl DiffUpdate {
 	/// Append the keyboard shortcut to the tooltip where applicable
 	pub fn apply_keyboard_shortcut(&mut self, action_input_mapping: &impl Fn(&MessageDiscriminant) -> Option<KeysGroup>) {
-		// Function used multiple times later in this code block to convert `ActionKeys::Action` to `ActionKeys::Keys` and append its shortcut to the tooltip
-		let apply_shortcut_to_tooltip = |shortcut_keys: &mut ActionKeys, tooltip_shortcut: &mut String| {
-			let shortcut_text = shortcut_keys.to_keys(action_input_mapping);
-
-			if matches!(shortcut_keys, ActionKeys::Keys(_)) && !shortcut_text.is_empty() {
-				tooltip_shortcut.push_str(&shortcut_text);
-			}
-		};
-
-		// Go through each widget to convert `ActionKeys::Action` to `ActionKeys::Keys` and append the key combination to the widget tooltip
-		let convert_tooltip = |widget_holder: &mut WidgetHolder| {
+		// Go through each widget to convert `ActionShortcut::Action` to `ActionShortcut::Shortcut` and append the key combination to the widget tooltip
+		let convert_tooltip = |widget_instance: &mut WidgetInstance| {
 			// Handle all the widgets that have tooltips
-			let mut shortcut_keys = match &mut widget_holder.widget {
-				Widget::BreadcrumbTrailButtons(widget) => Some((&mut widget.tooltip_shortcut, &mut widget.shortcut_keys)),
-				Widget::CheckboxInput(widget) => Some((&mut widget.tooltip_shortcut, &mut widget.shortcut_keys)),
-				Widget::ColorInput(widget) => Some((&mut widget.tooltip_shortcut, &mut widget.shortcut_keys)),
-				Widget::DropdownInput(widget) => Some((&mut widget.tooltip_shortcut, &mut widget.shortcut_keys)),
-				Widget::FontInput(widget) => Some((&mut widget.tooltip_shortcut, &mut widget.shortcut_keys)),
-				Widget::IconButton(widget) => Some((&mut widget.tooltip_shortcut, &mut widget.shortcut_keys)),
-				Widget::NumberInput(widget) => Some((&mut widget.tooltip_shortcut, &mut widget.shortcut_keys)),
-				Widget::ParameterExposeButton(widget) => Some((&mut widget.tooltip_shortcut, &mut widget.shortcut_keys)),
-				Widget::PopoverButton(widget) => Some((&mut widget.tooltip_shortcut, &mut widget.shortcut_keys)),
-				Widget::TextButton(widget) => Some((&mut widget.tooltip_shortcut, &mut widget.shortcut_keys)),
-				Widget::ImageButton(widget) => Some((&mut widget.tooltip_shortcut, &mut widget.shortcut_keys)),
+			let tooltip_shortcut = match &mut widget_instance.widget {
+				Widget::BreadcrumbTrailButtons(widget) => widget.tooltip_shortcut.as_mut(),
+				Widget::CheckboxInput(widget) => widget.tooltip_shortcut.as_mut(),
+				Widget::ColorInput(widget) => widget.tooltip_shortcut.as_mut(),
+				Widget::DropdownInput(widget) => widget.tooltip_shortcut.as_mut(),
+				Widget::FontInput(widget) => widget.tooltip_shortcut.as_mut(),
+				Widget::IconButton(widget) => widget.tooltip_shortcut.as_mut(),
+				Widget::NumberInput(widget) => widget.tooltip_shortcut.as_mut(),
+				Widget::ParameterExposeButton(widget) => widget.tooltip_shortcut.as_mut(),
+				Widget::PopoverButton(widget) => widget.tooltip_shortcut.as_mut(),
+				Widget::TextButton(widget) => widget.tooltip_shortcut.as_mut(),
+				Widget::ImageButton(widget) => widget.tooltip_shortcut.as_mut(),
+				Widget::ShortcutLabel(widget) => widget.shortcut.as_mut(),
 				Widget::IconLabel(_)
 				| Widget::ImageLabel(_)
 				| Widget::CurveInput(_)
-				| Widget::InvisibleStandinInput(_)
 				| Widget::NodeCatalog(_)
 				| Widget::ReferencePointInput(_)
 				| Widget::RadioInput(_)
@@ -690,29 +614,62 @@ impl DiffUpdate {
 				| Widget::TextLabel(_)
 				| Widget::WorkingColorsInput(_) => None,
 			};
-			if let Some((tooltip_shortcut, Some(shortcut_keys))) = &mut shortcut_keys {
-				apply_shortcut_to_tooltip(shortcut_keys, tooltip_shortcut);
+
+			// Convert `ActionShortcut::Action` to `ActionShortcut::Shortcut`
+			if let Some(tooltip_shortcut) = tooltip_shortcut {
+				tooltip_shortcut.realize_shortcut(action_input_mapping);
 			}
 
 			// Handle RadioInput separately because its tooltips are children of the widget
-			if let Widget::RadioInput(radio_input) = &mut widget_holder.widget {
+			if let Widget::RadioInput(radio_input) = &mut widget_instance.widget {
 				for radio_entry_data in &mut radio_input.entries {
-					if let RadioEntryData {
-						tooltip_shortcut,
-						shortcut_keys: Some(shortcut_keys),
-						..
-					} = radio_entry_data
-					{
-						apply_shortcut_to_tooltip(shortcut_keys, tooltip_shortcut);
+					// Convert `ActionShortcut::Action` to `ActionShortcut::Shortcut`
+					if let Some(tooltip_shortcut) = radio_entry_data.tooltip_shortcut.as_mut() {
+						tooltip_shortcut.realize_shortcut(action_input_mapping);
 					}
 				}
 			}
 		};
 
+		// Recursively fill menu list entries with their realized shortcut keys specific to the current bindings and platform
+		let apply_action_shortcut_to_menu_lists = |entry_sections: &mut MenuListEntrySections| {
+			struct RecursiveWrapper<'a>(&'a dyn Fn(&mut MenuListEntrySections, &RecursiveWrapper));
+			let recursive_wrapper = RecursiveWrapper(&|entry_sections: &mut MenuListEntrySections, recursive_wrapper| {
+				for entries in entry_sections {
+					for entry in entries {
+						// Convert `ActionShortcut::Action` to `ActionShortcut::Shortcut`
+						if let Some(tooltip_shortcut) = &mut entry.tooltip_shortcut {
+							tooltip_shortcut.realize_shortcut(action_input_mapping);
+						}
+
+						// Recursively call this inner closure on the menu's children
+						(recursive_wrapper.0)(&mut entry.children, recursive_wrapper);
+					}
+				}
+			});
+			(recursive_wrapper.0)(entry_sections, &recursive_wrapper)
+		};
+
+		// Apply shortcut conversions to all widgets that have menu lists
+		let convert_menu_lists = |widget_instance: &mut WidgetInstance| match &mut widget_instance.widget {
+			Widget::DropdownInput(dropdown_input) => apply_action_shortcut_to_menu_lists(&mut dropdown_input.entries),
+			Widget::TextButton(text_button) => apply_action_shortcut_to_menu_lists(&mut text_button.menu_list_children),
+			_ => {}
+		};
+
 		match self {
-			Self::SubLayout(sub_layout) => sub_layout.iter_mut().flat_map(|layout_group| layout_group.iter_mut()).for_each(convert_tooltip),
-			Self::LayoutGroup(layout_group) => layout_group.iter_mut().for_each(convert_tooltip),
-			Self::Widget(widget_holder) => convert_tooltip(widget_holder),
+			Self::Layout(layout) => layout.0.iter_mut().flat_map(|layout_group| layout_group.iter_mut()).for_each(|widget_instance| {
+				convert_tooltip(widget_instance);
+				convert_menu_lists(widget_instance);
+			}),
+			Self::LayoutGroup(layout_group) => layout_group.iter_mut().for_each(|widget_instance| {
+				convert_tooltip(widget_instance);
+				convert_menu_lists(widget_instance);
+			}),
+			Self::Widget(widget_instance) => {
+				convert_tooltip(widget_instance);
+				convert_menu_lists(widget_instance);
+			}
 		}
 	}
 }

@@ -2,7 +2,7 @@
 	import { getContext } from "svelte";
 
 	import type { Editor } from "@graphite/editor";
-	import type { Widget, WidgetSpanColumn, WidgetSpanRow } from "@graphite/messages";
+	import type { LayoutTarget, WidgetInstance, WidgetSpanColumn, WidgetSpanRow } from "@graphite/messages";
 	import { narrowWidgetProps, isWidgetSpanColumn, isWidgetSpanRow } from "@graphite/messages";
 	import { debouncer } from "@graphite/utility-functions/debounce";
 
@@ -27,14 +27,14 @@
 	import IconLabel from "@graphite/components/widgets/labels/IconLabel.svelte";
 	import ImageLabel from "@graphite/components/widgets/labels/ImageLabel.svelte";
 	import Separator from "@graphite/components/widgets/labels/Separator.svelte";
+	import ShortcutLabel from "@graphite/components/widgets/labels/ShortcutLabel.svelte";
 	import TextLabel from "@graphite/components/widgets/labels/TextLabel.svelte";
 	import WidgetLayout from "@graphite/components/widgets/WidgetLayout.svelte";
 
 	const editor = getContext<Editor>("editor");
 
 	export let widgetData: WidgetSpanRow | WidgetSpanColumn;
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	export let layoutTarget: any;
+	export let layoutTarget: LayoutTarget;
 
 	let className = "";
 	export { className as class };
@@ -54,8 +54,8 @@
 		if (isWidgetSpanColumn(widgetData)) return "column";
 	}
 
-	function watchWidgets(widgetData: WidgetSpanRow | WidgetSpanColumn): Widget[] {
-		let widgets: Widget[] = [];
+	function watchWidgets(widgetData: WidgetSpanRow | WidgetSpanColumn): WidgetInstance[] {
+		let widgets: WidgetInstance[] = [];
 		if (isWidgetSpanRow(widgetData)) widgets = widgetData.rowWidgets;
 		else if (isWidgetSpanColumn(widgetData)) widgets = widgetData.columnWidgets;
 		return widgets;
@@ -127,6 +127,11 @@
 		{#if iconLabel}
 			<IconLabel {...exclude(iconLabel)} />
 		{/if}
+		{@const shortcutLabel = narrowWidgetProps(component.props, "ShortcutLabel")}
+		{@const shortcutLabelShortcut = shortcutLabel?.shortcut ? { ...shortcutLabel, shortcut: shortcutLabel.shortcut } : undefined}
+		{#if shortcutLabel && shortcutLabelShortcut}
+			<ShortcutLabel {...exclude(shortcutLabelShortcut)} />
+		{/if}
 		{@const imageLabel = narrowWidgetProps(component.props, "ImageLabel")}
 		{#if imageLabel}
 			<ImageLabel {...exclude(imageLabel)} />
@@ -156,7 +161,7 @@
 		{@const popoverButton = narrowWidgetProps(component.props, "PopoverButton")}
 		{#if popoverButton}
 			<PopoverButton {...exclude(popoverButton, ["popoverLayout"])}>
-				<WidgetLayout layout={{ layout: popoverButton.popoverLayout, layoutTarget: layoutTarget }} />
+				<WidgetLayout layout={popoverButton.popoverLayout} {layoutTarget} />
 			</PopoverButton>
 		{/if}
 		{@const radioInput = narrowWidgetProps(component.props, "RadioInput")}
@@ -177,7 +182,7 @@
 		{/if}
 		{@const textButton = narrowWidgetProps(component.props, "TextButton")}
 		{#if textButton}
-			<TextButton {...exclude(textButton)} action={() => widgetValueCommitAndUpdate(index, undefined)} />
+			<TextButton {...exclude(textButton)} action={() => widgetValueCommitAndUpdate(index, [])} on:selectedEntryValuePath={({ detail }) => widgetValueCommitAndUpdate(index, detail)} />
 		{/if}
 		{@const breadcrumbTrailButtons = narrowWidgetProps(component.props, "BreadcrumbTrailButtons")}
 		{#if breadcrumbTrailButtons}

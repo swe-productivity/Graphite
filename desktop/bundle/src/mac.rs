@@ -5,7 +5,7 @@ use std::path::{Path, PathBuf};
 
 use crate::common::*;
 
-const APP_ID: &str = "rs.graphite.Graphite";
+const APP_ID: &str = "art.graphite.Graphite";
 
 const PACKAGE: &str = "graphite-desktop-platform-mac";
 const HELPER_BIN: &str = "graphite-desktop-platform-mac-helper";
@@ -40,7 +40,7 @@ fn bundle(out_dir: &Path, app_bin: &Path, helper_bin: &Path) -> PathBuf {
 
 	create_app(&app_dir, APP_ID, APP_NAME, app_bin, false);
 
-	for helper_type in [None, Some("GPU"), Some("Renderer"), Some("Plugin"), Some("Alerts")] {
+	for helper_type in [None, Some("GPU"), Some("Renderer")] {
 		let helper_id_suffix = helper_type.map(|t| format!(".{t}")).unwrap_or_default();
 		let helper_id = format!("{APP_ID}.helper{helper_id_suffix}");
 		let helper_name_suffix = helper_type.map(|t| format!(" ({t})")).unwrap_or_default();

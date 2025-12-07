@@ -157,7 +157,8 @@ fn static_nodes() -> Vec<DocumentNodeDefinition> {
 				},
 			},
 			description: Cow::Borrowed(
-				"Improves rendering performance if used in rare circumstances where automatic caching is not yet advanced enough to handle the situation.
+				"Improves rendering performance if used in rare circumstances where automatic caching is not yet advanced enough to handle the situation.\n\
+				\n\
 				Stores the last evaluated data that flowed through this node, and immediately returns that data on subsequent renders if the context has not changed.",
 			),
 			properties: None,
@@ -1014,7 +1015,7 @@ fn static_nodes() -> Vec<DocumentNodeDefinition> {
 					..Default::default()
 				},
 			},
-			description: Cow::Borrowed("Loads an image from a given URL"),
+			description: Cow::Borrowed("Loads an image from a given URL."),
 			properties: None,
 		},
 		#[cfg(all(feature = "gpu", target_family = "wasm"))]
@@ -2535,7 +2536,7 @@ fn static_input_properties() -> InputProperties {
 			};
 			if let Some(&TaggedValue::F64(val)) = input.as_non_exposed_value() {
 				widgets.extend_from_slice(&[
-					Separator::new(SeparatorType::Unrelated).widget_holder(),
+					Separator::new(SeparatorType::Unrelated).widget_instance(),
 					NumberInput::new(Some(val))
 						.unit("°")
 						.mode(NumberInputMode::Range)
@@ -2547,7 +2548,7 @@ fn static_input_properties() -> InputProperties {
 							index,
 						))
 						.on_commit(node_properties::commit_value)
-						.widget_holder(),
+						.widget_instance(),
 				]);
 			}
 
@@ -2566,7 +2567,7 @@ fn static_input_properties() -> InputProperties {
 			};
 			if let Some(&TaggedValue::DVec2(val)) = input.as_non_exposed_value() {
 				widgets.extend_from_slice(&[
-					Separator::new(SeparatorType::Unrelated).widget_holder(),
+					Separator::new(SeparatorType::Unrelated).widget_instance(),
 					NumberInput::new(Some(val.x))
 						.label("X")
 						.unit("°")
@@ -2578,8 +2579,8 @@ fn static_input_properties() -> InputProperties {
 							index,
 						))
 						.on_commit(node_properties::commit_value)
-						.widget_holder(),
-					Separator::new(SeparatorType::Related).widget_holder(),
+						.widget_instance(),
+					Separator::new(SeparatorType::Related).widget_instance(),
 					NumberInput::new(Some(val.y))
 						.label("Y")
 						.unit("°")
@@ -2591,7 +2592,7 @@ fn static_input_properties() -> InputProperties {
 							index,
 						))
 						.on_commit(node_properties::commit_value)
-						.widget_holder(),
+						.widget_instance(),
 				]);
 			}
 

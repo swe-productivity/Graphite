@@ -392,18 +392,6 @@ impl EditorHandle {
 		self.dispatch(message);
 	}
 
-	#[wasm_bindgen(js_name = openDocument)]
-	pub fn open_document(&self) {
-		let message = PortfolioMessage::OpenDocument;
-		self.dispatch(message);
-	}
-
-	#[wasm_bindgen(js_name = demoArtworkDialog)]
-	pub fn demo_artwork_dialog(&self) {
-		let message = DialogMessage::RequestDemoArtworkDialog;
-		self.dispatch(message);
-	}
-
 	#[wasm_bindgen(js_name = openDocumentFile)]
 	pub fn open_document_file(&self, document_name: String, document_serialized_content: String) {
 		let message = PortfolioMessage::OpenDocumentFile {
@@ -596,15 +584,6 @@ impl EditorHandle {
 		Ok(())
 	}
 
-	/// Begin sampling a pixel color from the document by entering eyedropper sampling mode
-	#[wasm_bindgen(js_name = eyedropperSampleForColorPicker)]
-	pub fn eyedropper_sample_for_color_picker(&self) -> Result<(), JsValue> {
-		let message = DialogMessage::RequestComingSoonDialog { issue: Some(832) };
-		self.dispatch(message);
-
-		Ok(())
-	}
-
 	/// Update primary color with values on a scale from 0 to 1.
 	#[wasm_bindgen(js_name = updatePrimaryColor)]
 	pub fn update_primary_color(&self, red: f32, green: f32, blue: f32, alpha: f32) -> Result<(), JsValue> {
@@ -635,13 +614,6 @@ impl EditorHandle {
 		self.dispatch(message);
 
 		Ok(())
-	}
-
-	/// Visit the given URL
-	#[wasm_bindgen(js_name = visitUrl)]
-	pub fn visit_url(&self, url: String) {
-		let message = FrontendMessage::TriggerVisitLink { url };
-		self.dispatch(message);
 	}
 
 	/// Paste layers from a serialized JSON representation

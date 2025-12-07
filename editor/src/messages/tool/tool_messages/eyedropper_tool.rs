@@ -35,7 +35,7 @@ impl ToolMetadata for EyedropperTool {
 
 impl LayoutHolder for EyedropperTool {
 	fn layout(&self) -> Layout {
-		Layout::WidgetLayout(WidgetLayout::default())
+		Layout::default()
 	}
 }
 
@@ -138,7 +138,7 @@ impl Fsm for EyedropperToolFsmState {
 			}
 		};
 
-		responses.add(FrontendMessage::UpdateInputHints { hint_data });
+		hint_data.send_layout(responses);
 	}
 
 	fn update_cursor(&self, responses: &mut VecDeque<Message>) {

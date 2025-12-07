@@ -33,7 +33,7 @@
 		if (!editor.handle.inDevelopmentMode()) return { name, unsaved };
 
 		const tooltipDescription = `Document ID: ${doc.id}`;
-		return { name, unsaved, tooltipDescription };
+		return { name, unsaved, tooltipLabel: name, tooltipDescription };
 	});
 
 	const editor = getContext<Editor>("editor");
@@ -135,7 +135,7 @@
 			<LayoutRow class="workspace-grid-subdivision" styles={{ "flex-grow": panelSizes["document"] }} data-subdivision-name="document">
 				<Panel
 					class="document-panel"
-					panelType={$portfolio.documents.length > 0 ? "Document" : undefined}
+					panelType={$portfolio.documents.length > 0 ? "Document" : "Welcome"}
 					tabCloseButtons={true}
 					tabMinWidths={true}
 					tabLabels={documentTabLabels}

@@ -1,8 +1,7 @@
 use super::utility_types::{BoxSelection, ContextMenuInformation, DragStart, FrontendNode};
 use super::{document_node_definitions, node_properties};
 use crate::consts::GRID_SIZE;
-use crate::messages::input_mapper::utility_types::input_keyboard::KeysGroup;
-use crate::messages::input_mapper::utility_types::macros::action_keys;
+use crate::messages::input_mapper::utility_types::macros::{action_shortcut, action_shortcut_manual};
 use crate::messages::layout::utility_types::widget_prelude::*;
 use crate::messages::portfolio::document::document_message_handler::navigation_controls;
 use crate::messages::portfolio::document::graph_operation::utility_types::ModifyInputsContext;
@@ -64,20 +63,21 @@ pub struct NodeGraphMessageHandler {
 	pub drag_start_chain_nodes: Vec<NodeId>,
 	/// If dragging the background to create a box selection, this stores its starting point in node graph coordinates,
 	/// plus a flag indicating if it has been dragged since the mousedown began.
-	box_selection_start: Option<(DVec2, bool)>,
+	pub box_selection_start: Option<(DVec2, bool)>,
 	/// Restore the selection before box selection if it is aborted
-	selection_before_pointer_down: Vec<NodeId>,
+	pub selection_before_pointer_down: Vec<NodeId>,
 	/// If the grip icon is held during a drag, then shift without pushing other nodes
 	shift_without_push: bool,
 	disconnecting: Option<InputConnector>,
 	initial_disconnecting: bool,
 	/// Node to select on pointer up if multiple nodes are selected and they were not dragged.
 	select_if_not_dragged: Option<NodeId>,
-	/// The start of the dragged line (cannot be moved), stored in node graph coordinates
+	/// The start of the dragged line (cannot be moved), stored in node graph coordinates.
 	pub wire_in_progress_from_connector: Option<DVec2>,
-	wire_in_progress_type: FrontendGraphDataType,
-	/// The end point of the dragged line (cannot be moved), stored in node graph coordinates
+	/// The end point of the dragged line (cannot be moved), stored in node graph coordinates.
 	pub wire_in_progress_to_connector: Option<DVec2>,
+	/// The data type determining the color of the wire being dragged.
+	pub wire_in_progress_type: FrontendGraphDataType,
 	/// State for the context menu popups.
 	pub context_menu: Option<ContextMenuInformation>,
 	/// Index of selected node to be deselected on pointer up when shift clicking an already selected node
@@ -203,8 +203,30 @@ impl<'a> MessageHandler<NodeGraphMessage, NodeGraphMessageContext<'a>> for NodeG
 			}
 			NodeGraphMessage::CreateWire { output_connector, input_connector } => {
 				// TODO: Add support for flattening NodeInput::Import exports in flatten_with_fns https://github.com/GraphiteEditor/Graphite/issues/1762
-				if matches!(input_connector, InputConnector::Export(_)) && matches!(output_connector, OutputConnector::Import { .. }) {
-					responses.add(DialogMessage::RequestComingSoonDialog { issue: Some(1762) });
+				if let (InputConnector::Export(_), OutputConnector::Import(_)) = (input_connector, output_connector) {
+					let mid_point = (network_interface.get_output_center(&output_connector, breadcrumb_network_path).unwrap()
+						+ network_interface.get_input_center(&input_connector, breadcrumb_network_path).unwrap())
+						/ 2.;
+					let node_template = Box::new(document_node_definitions::resolve_document_node_type("Passthrough").unwrap().default_node_template());
+
+					let node_id = NodeId::new();
+					responses.add(NodeGraphMessage::InsertNode { node_id, node_template });
+					responses.add(NodeGraphMessage::ShiftNodePosition {
+						node_id,
+						x: (mid_point.x / 24.) as i32,
+						y: (mid_point.y / 24.) as i32,
+					});
+					let node_input_connector = InputConnector::node(node_id, 0);
+					let node_output_connector = OutputConnector::node(node_id, 0);
+					responses.add(NodeGraphMessage::CreateWire {
+						output_connector,
+						input_connector: node_input_connector,
+					});
+					responses.add(NodeGraphMessage::CreateWire {
+						output_connector: node_output_connector,
+						input_connector,
+					});
+
 					return;
 				}
 				network_interface.create_wire(&output_connector, &input_connector, selection_network_path);
@@ -296,8 +318,8 @@ impl<'a> MessageHandler<NodeGraphMessage, NodeGraphMessageContext<'a>> for NodeG
 					}
 
 					self.wire_in_progress_from_connector = None;
-					self.wire_in_progress_type = FrontendGraphDataType::General;
 					self.wire_in_progress_to_connector = None;
+					self.wire_in_progress_type = FrontendGraphDataType::General;
 				}
 				responses.add(FrontendMessage::UpdateWirePathInProgress { wire_path: None });
 				responses.add(FrontendMessage::UpdateContextMenuInformation {
@@ -745,7 +767,6 @@ impl<'a> MessageHandler<NodeGraphMessage, NodeGraphMessageContext<'a>> for NodeG
 				let clicked_input = network_interface.input_connector_from_click(click, selection_network_path);
 				let clicked_output = network_interface.output_connector_from_click(click, selection_network_path);
 				let network_metadata = network_interface.network_metadata(selection_network_path).unwrap();
-
 				// Create the add node popup on right click, then exit
 				if right_click {
 					// Abort dragging a node
@@ -769,8 +790,9 @@ impl<'a> MessageHandler<NodeGraphMessage, NodeGraphMessageContext<'a>> for NodeG
 					// Abort dragging a wire
 					if self.wire_in_progress_from_connector.is_some() {
 						self.wire_in_progress_from_connector = None;
-						self.wire_in_progress_type = FrontendGraphDataType::General;
 						self.wire_in_progress_to_connector = None;
+						self.wire_in_progress_type = FrontendGraphDataType::General;
+
 						responses.add(DocumentMessage::AbortTransaction);
 						responses.add(FrontendMessage::UpdateWirePathInProgress { wire_path: None });
 						return;
@@ -851,8 +873,9 @@ impl<'a> MessageHandler<NodeGraphMessage, NodeGraphMessageContext<'a>> for NodeG
 				if self.context_menu.is_some() {
 					self.context_menu = None;
 					self.wire_in_progress_from_connector = None;
-					self.wire_in_progress_type = FrontendGraphDataType::General;
 					self.wire_in_progress_to_connector = None;
+					self.wire_in_progress_type = FrontendGraphDataType::General;
+
 					responses.add(FrontendMessage::UpdateContextMenuInformation {
 						context_menu_information: self.context_menu.clone(),
 					});
@@ -1389,14 +1412,18 @@ impl<'a> MessageHandler<NodeGraphMessage, NodeGraphMessageContext<'a>> for NodeG
 					});
 					responses.add(DocumentMessage::EndTransaction);
 				}
+
 				self.drag_start = None;
 				self.begin_dragging = false;
 				self.box_selection_start = None;
+
 				self.wire_in_progress_from_connector = None;
-				self.wire_in_progress_type = FrontendGraphDataType::General;
 				self.wire_in_progress_to_connector = None;
+				self.wire_in_progress_type = FrontendGraphDataType::General;
+
 				self.reordering_export = None;
 				self.reordering_import = None;
+
 				responses.add(DocumentMessage::EndTransaction);
 				responses.add(FrontendMessage::UpdateWirePathInProgress { wire_path: None });
 				responses.add(FrontendMessage::UpdateBox { box_selection: None });
@@ -2070,7 +2097,7 @@ impl NodeGraphMessageHandler {
 	/// Send the cached layout to the frontend for the control bar at the top of the node panel
 	fn send_node_bar_layout(&self, responses: &mut VecDeque<Message>) {
 		responses.add(LayoutMessage::SendLayout {
-			layout: Layout::WidgetLayout(WidgetLayout::new(self.widgets.to_vec())),
+			layout: Layout(self.widgets.to_vec()),
 			layout_target: LayoutTarget::NodeGraphControlBar,
 		});
 	}
@@ -2108,7 +2135,7 @@ impl NodeGraphMessageHandler {
 				.icon(Some("Node".to_string()))
 				.tooltip_label("New Node")
 				.tooltip_description("To add a node at the pointer location, perform the shortcut in an open area of the graph.")
-				.tooltip_shortcut(Key::MouseRight.to_string())
+				.tooltip_shortcut(action_shortcut_manual!(Key::MouseRight))
 				.popover_layout({
 					// Showing only compatible types
 					let compatible_type = match (selection_includes_layers, has_multiple_selection, selected_layer) {
@@ -2145,50 +2172,50 @@ impl NodeGraphMessageHandler {
 								}
 							}
 						})
-						.widget_holder();
-					vec![LayoutGroup::Row { widgets: vec![node_chooser] }]
+						.widget_instance();
+					Layout(vec![LayoutGroup::Row { widgets: vec![node_chooser] }])
 				})
-				.widget_holder(),
+				.widget_instance(),
 			//
-			Separator::new(SeparatorType::Unrelated).widget_holder(),
+			Separator::new(SeparatorType::Unrelated).widget_instance(),
 			//
 			IconButton::new("Folder", 24)
 				.tooltip_label("Group Selected")
-				.shortcut_keys(action_keys!(DocumentMessageDiscriminant::GroupSelectedLayers))
+				.tooltip_shortcut(action_shortcut!(DocumentMessageDiscriminant::GroupSelectedLayers))
 				.on_update(|_| {
 					let group_folder_type = GroupFolderType::Layer;
 					DocumentMessage::GroupSelectedLayers { group_folder_type }.into()
 				})
 				.disabled(!has_selection)
-				.widget_holder(),
+				.widget_instance(),
 			IconButton::new("NewLayer", 24)
 				.tooltip_label("New Layer")
-				.shortcut_keys(action_keys!(DocumentMessageDiscriminant::CreateEmptyFolder))
+				.tooltip_shortcut(action_shortcut!(DocumentMessageDiscriminant::CreateEmptyFolder))
 				.on_update(|_| DocumentMessage::CreateEmptyFolder.into())
-				.widget_holder(),
+				.widget_instance(),
 			IconButton::new("Trash", 24)
 				.tooltip_label("Delete Selected")
-				.shortcut_keys(action_keys!(DocumentMessageDiscriminant::DeleteSelectedLayers))
+				.tooltip_shortcut(action_shortcut!(DocumentMessageDiscriminant::DeleteSelectedLayers))
 				.on_update(|_| DocumentMessage::DeleteSelectedLayers.into())
 				.disabled(!has_selection)
-				.widget_holder(),
+				.widget_instance(),
 			//
-			Separator::new(SeparatorType::Unrelated).widget_holder(),
+			Separator::new(SeparatorType::Unrelated).widget_instance(),
 			//
 			IconButton::new(if selection_all_locked { "PadlockLocked" } else { "PadlockUnlocked" }, 24)
 				.hover_icon(Some((if selection_all_locked { "PadlockUnlocked" } else { "PadlockLocked" }).into()))
 				.tooltip_label(if selection_all_locked { "Unlock Selected" } else { "Lock Selected" })
-				.shortcut_keys(action_keys!(NodeGraphMessageDiscriminant::ToggleSelectedLocked))
+				.tooltip_shortcut(action_shortcut!(NodeGraphMessageDiscriminant::ToggleSelectedLocked))
 				.on_update(|_| NodeGraphMessage::ToggleSelectedLocked.into())
 				.disabled(!has_selection || !selection_includes_layers)
-				.widget_holder(),
+				.widget_instance(),
 			IconButton::new(if selection_all_visible { "EyeVisible" } else { "EyeHidden" }, 24)
 				.hover_icon(Some((if selection_all_visible { "EyeHide" } else { "EyeShow" }).into()))
 				.tooltip_label(if selection_all_visible { "Hide Selected" } else { "Show Selected" })
-				.shortcut_keys(action_keys!(NodeGraphMessageDiscriminant::ToggleSelectedVisibility))
+				.tooltip_shortcut(action_shortcut!(NodeGraphMessageDiscriminant::ToggleSelectedVisibility))
 				.on_update(|_| NodeGraphMessage::ToggleSelectedVisibility.into())
 				.disabled(!has_selection)
-				.widget_holder(),
+				.widget_instance(),
 		];
 
 		let mut selection = selected_nodes.selected_nodes();
@@ -2213,8 +2240,8 @@ impl NodeGraphMessageHandler {
 				.icon(Some("FrameAll".to_string()))
 				.tooltip_description("Restore preview to the graph output.")
 				.on_update(move |_| NodeGraphMessage::TogglePreview { node_id }.into())
-				.widget_holder();
-			widgets.extend([Separator::new(SeparatorType::Unrelated).widget_holder(), button]);
+				.widget_instance();
+			widgets.extend([Separator::new(SeparatorType::Unrelated).widget_instance(), button]);
 		} else if let Some(&node_id) = selection {
 			let selection_is_not_already_the_output = !network
 				.exports
@@ -2225,17 +2252,17 @@ impl NodeGraphMessageHandler {
 					.icon(Some("FrameAll".to_string()))
 					.tooltip_label("Preview")
 					.tooltip_description("Temporarily set the graph output to the selected node or layer. Perform the shortcut on a node or layer for quick access.")
-					.tooltip_shortcut(KeysGroup(vec![Key::Alt, Key::MouseLeft]).to_string())
+					.tooltip_shortcut(action_shortcut_manual!(Key::Alt, Key::MouseLeft))
 					.on_update(move |_| NodeGraphMessage::TogglePreview { node_id }.into())
-					.widget_holder();
-				widgets.extend([Separator::new(SeparatorType::Unrelated).widget_holder(), button]);
+					.widget_instance();
+				widgets.extend([Separator::new(SeparatorType::Unrelated).widget_instance(), button]);
 			}
 		}
 
 		let subgraph_path_names_length = subgraph_path_names.len();
 		if subgraph_path_names_length >= 2 {
 			widgets.extend([
-				Separator::new(SeparatorType::Unrelated).widget_holder(),
+				Separator::new(SeparatorType::Unrelated).widget_instance(),
 				BreadcrumbTrailButtons::new(subgraph_path_names)
 					.on_update(move |index| {
 						DocumentMessage::ExitNestedNetwork {
@@ -2243,7 +2270,7 @@ impl NodeGraphMessageHandler {
 						}
 						.into()
 					})
-					.widget_holder(),
+					.widget_instance(),
 			]);
 		}
 
@@ -2274,19 +2301,19 @@ impl NodeGraphMessageHandler {
 					}
 					.into()
 				})
-				.widget_holder(),
-			Separator::new(SeparatorType::Unrelated).widget_holder(),
+				.widget_instance(),
+			Separator::new(SeparatorType::Unrelated).widget_instance(),
 		];
 		widgets.extend(navigation_controls(node_graph_ptz, navigation_handler, true));
 		widgets.extend([
-			Separator::new(SeparatorType::Unrelated).widget_holder(),
+			Separator::new(SeparatorType::Unrelated).widget_instance(),
 			TextButton::new("Node Graph")
 				.icon(Some("GraphViewOpen".into()))
 				.hover_icon(Some("GraphViewClosed".into()))
 				.tooltip_label("Hide Node Graph")
-				.shortcut_keys(action_keys!(DocumentMessageDiscriminant::GraphViewOverlayToggle))
+				.tooltip_shortcut(action_shortcut!(DocumentMessageDiscriminant::GraphViewOverlayToggle))
 				.on_update(move |_| DocumentMessage::GraphViewOverlayToggle.into())
-				.widget_holder(),
+				.widget_instance(),
 		]);
 
 		self.widgets[1] = LayoutGroup::Row { widgets };
@@ -2333,9 +2360,9 @@ impl NodeGraphMessageHandler {
 					if let [node_id] = *nodes.as_slice() {
 						properties.push(LayoutGroup::Row {
 							widgets: vec![
-								Separator::new(SeparatorType::Related).widget_holder(),
-								IconLabel::new("Node").tooltip_description("Name of the selected node.").widget_holder(),
-								Separator::new(SeparatorType::Related).widget_holder(),
+								Separator::new(SeparatorType::Related).widget_instance(),
+								IconLabel::new("Node").tooltip_description("Name of the selected node.").widget_instance(),
+								Separator::new(SeparatorType::Related).widget_instance(),
 								TextInput::new(context.network_interface.display_name(&node_id, context.selection_network_path))
 									.tooltip_description("Name of the selected node.")
 									.on_update(move |text_input| {
@@ -2346,8 +2373,8 @@ impl NodeGraphMessageHandler {
 										}
 										.into()
 									})
-									.widget_holder(),
-								Separator::new(SeparatorType::Related).widget_holder(),
+									.widget_instance(),
+								Separator::new(SeparatorType::Related).widget_instance(),
 							],
 						});
 					}
@@ -2361,14 +2388,14 @@ impl NodeGraphMessageHandler {
 				// This may require store a separate path for the properties panel
 				let mut properties = vec![LayoutGroup::Row {
 					widgets: vec![
-						Separator::new(SeparatorType::Related).widget_holder(),
-						IconLabel::new("File").tooltip_description("Name of the current document.").widget_holder(),
-						Separator::new(SeparatorType::Related).widget_holder(),
+						Separator::new(SeparatorType::Related).widget_instance(),
+						IconLabel::new("File").tooltip_description("Name of the current document.").widget_instance(),
+						Separator::new(SeparatorType::Related).widget_instance(),
 						TextInput::new(context.document_name)
 							.tooltip_description("Name of the current document.")
 							.on_update(|text_input| DocumentMessage::RenameDocument { new_name: text_input.value.clone() }.into())
-							.widget_holder(),
-						Separator::new(SeparatorType::Related).widget_holder(),
+							.widget_instance(),
+						Separator::new(SeparatorType::Related).widget_instance(),
 					],
 				}];
 
@@ -2408,9 +2435,9 @@ impl NodeGraphMessageHandler {
 
 				let mut layer_properties = vec![LayoutGroup::Row {
 					widgets: vec![
-						Separator::new(SeparatorType::Related).widget_holder(),
-						IconLabel::new("Layer").tooltip_description("Name of the selected layer.").widget_holder(),
-						Separator::new(SeparatorType::Related).widget_holder(),
+						Separator::new(SeparatorType::Related).widget_instance(),
+						IconLabel::new("Layer").tooltip_description("Name of the selected layer.").widget_instance(),
+						Separator::new(SeparatorType::Related).widget_instance(),
 						TextInput::new(context.network_interface.display_name(&layer, context.selection_network_path))
 							.tooltip_description("Name of the selected layer.")
 							.on_update(move |text_input| {
@@ -2421,8 +2448,8 @@ impl NodeGraphMessageHandler {
 								}
 								.into()
 							})
-							.widget_holder(),
-						Separator::new(SeparatorType::Related).widget_holder(),
+							.widget_instance(),
+						Separator::new(SeparatorType::Related).widget_instance(),
 						PopoverButton::new()
 							.icon(Some("Node".to_string()))
 							.tooltip_description("Add an operation to the end of this layer's chain of nodes.")
@@ -2443,11 +2470,11 @@ impl NodeGraphMessageHandler {
 										}
 										.into()
 									})
-									.widget_holder();
-								vec![LayoutGroup::Row { widgets: vec![node_chooser] }]
+									.widget_instance();
+								Layout(vec![LayoutGroup::Row { widgets: vec![node_chooser] }])
 							})
-							.widget_holder(),
-						Separator::new(SeparatorType::Related).widget_holder(),
+							.widget_instance(),
+						Separator::new(SeparatorType::Related).widget_instance(),
 					],
 				}];
 
@@ -2720,8 +2747,7 @@ impl NodeGraphMessageHandler {
 
 		// Cancel the ongoing action
 		if wiring || dragging_nodes || dragging_box_selection {
-			let hint_data = HintData(vec![HintGroup(vec![HintInfo::mouse(MouseMotion::Rmb, ""), HintInfo::keys([Key::Escape], "Cancel").prepend_slash()])]);
-			responses.add(FrontendMessage::UpdateInputHints { hint_data });
+			HintData(vec![HintGroup(vec![HintInfo::mouse(MouseMotion::Rmb, ""), HintInfo::keys([Key::Escape], "Cancel").prepend_slash()])]).send_layout(responses);
 			return;
 		}
 
@@ -2749,7 +2775,7 @@ impl NodeGraphMessageHandler {
 			HintGroup(vec![HintInfo::mouse(MouseMotion::LmbDouble, "Enter Node Subgraph")]),
 			HintGroup(vec![HintInfo::keys_and_mouse([Key::Alt], MouseMotion::Lmb, "Preview Node Output")]),
 		]);
-		responses.add(FrontendMessage::UpdateInputHints { hint_data });
+		hint_data.send_layout(responses);
 	}
 }
 

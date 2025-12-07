@@ -3,15 +3,15 @@
 
 	import type { Editor } from "@graphite/editor";
 	import {
-		defaultWidgetLayout,
-		patchWidgetLayout,
+		patchLayout,
 		UpdateDocumentLayerDetails,
 		UpdateDocumentLayerStructureJs,
 		UpdateLayersPanelControlBarLeftLayout,
 		UpdateLayersPanelControlBarRightLayout,
 		UpdateLayersPanelBottomBarLayout,
+		SendShortcutAltClick,
 	} from "@graphite/messages";
-	import type { DataBuffer, LayerPanelEntry } from "@graphite/messages";
+	import type { ActionShortcut, DataBuffer, LayerPanelEntry, Layout } from "@graphite/messages";
 	import type { NodeGraphState } from "@graphite/state-providers/node-graph";
 	import { operatingSystem } from "@graphite/utility-functions/platform";
 	import { extractPixelData } from "@graphite/utility-functions/rasterization";
@@ -69,23 +69,29 @@
 	let layerToClipAltKeyPressed = false;
 
 	// Layouts
-	let layersPanelControlBarLeftLayout = defaultWidgetLayout();
-	let layersPanelControlBarRightLayout = defaultWidgetLayout();
-	let layersPanelBottomBarLayout = defaultWidgetLayout();
+	let layersPanelControlBarLeftLayout: Layout = [];
+	let layersPanelControlBarRightLayout: Layout = [];
+	let layersPanelBottomBarLayout: Layout = [];
+
+	let altClickShortcut: ActionShortcut | undefined;
 
 	onMount(() => {
+		editor.subscriptions.subscribeJsMessage(SendShortcutAltClick, async (data) => {
+			altClickShortcut = data.shortcut;
+		});
+
 		editor.subscriptions.subscribeJsMessage(UpdateLayersPanelControlBarLeftLayout, (updateLayersPanelControlBarLeftLayout) => {
-			patchWidgetLayout(layersPanelControlBarLeftLayout, updateLayersPanelControlBarLeftLayout);
+			patchLayout(layersPanelControlBarLeftLayout, updateLayersPanelControlBarLeftLayout);
 			layersPanelControlBarLeftLayout = layersPanelControlBarLeftLayout;
 		});
 
 		editor.subscriptions.subscribeJsMessage(UpdateLayersPanelControlBarRightLayout, (updateLayersPanelControlBarRightLayout) => {
-			patchWidgetLayout(layersPanelControlBarRightLayout, updateLayersPanelControlBarRightLayout);
+			patchLayout(layersPanelControlBarRightLayout, updateLayersPanelControlBarRightLayout);
 			layersPanelControlBarRightLayout = layersPanelControlBarRightLayout;
 		});
 
 		editor.subscriptions.subscribeJsMessage(UpdateLayersPanelBottomBarLayout, (updateLayersPanelBottomBarLayout) => {
-			patchWidgetLayout(layersPanelBottomBarLayout, updateLayersPanelBottomBarLayout);
+			patchLayout(layersPanelBottomBarLayout, updateLayersPanelBottomBarLayout);
 			layersPanelBottomBarLayout = layersPanelBottomBarLayout;
 		});
 
@@ -579,11 +585,11 @@
 
 <LayoutCol class="layers" on:dragleave={() => (dragInPanel = false)}>
 	<LayoutRow class="control-bar" scrollableX={true}>
-		<WidgetLayout layout={layersPanelControlBarLeftLayout} />
-		{#if layersPanelControlBarLeftLayout?.layout?.length > 0 && layersPanelControlBarRightLayout?.layout?.length > 0}
+		<WidgetLayout layout={layersPanelControlBarLeftLayout} layoutTarget="LayersPanelControlLeftBar" />
+		{#if layersPanelControlBarLeftLayout?.length > 0 && layersPanelControlBarRightLayout?.length > 0}
 			<Separator />
 		{/if}
-		<WidgetLayout layout={layersPanelControlBarRightLayout} />
+		<WidgetLayout layout={layersPanelControlBarRightLayout} layoutTarget="LayersPanelControlRightBar" />
 	</LayoutRow>
 	<LayoutRow class="list-area" classes={{ "drag-ongoing": Boolean(internalDragState?.active && draggingData) }} scrollableY={true}>
 		<LayoutCol
@@ -622,7 +628,7 @@
 								? "Hide the layers nested within. (To affect all open descendants, perform the shortcut shown.)"
 								: "Show the layers nested within. (To affect all closed descendants, perform the shortcut shown.)") +
 								(listing.entry.ancestorOfSelected && !listing.entry.expanded ? "\n\nNote: a selected layer is currently contained within.\n" : "")}
-							data-tooltip-shortcut="Alt Click"
+							data-tooltip-shortcut={altClickShortcut?.shortcut ? JSON.stringify(altClickShortcut.shortcut) : undefined}
 							on:click={(e) => handleExpandArrowClickWithModifiers(e, listing.entry.id)}
 							tabindex="0"
 						></button>
@@ -634,7 +640,7 @@
 							icon="Clipped"
 							class="clipped-arrow"
 							tooltipDescription="Clipping mask is active. To release it, perform the shortcut on the layer border."
-							tooltipShortcut="Alt Click"
+							tooltipShortcut={altClickShortcut}
 						/>
 					{/if}
 					<div class="thumbnail">
@@ -688,7 +694,7 @@
 		{/if}
 	</LayoutRow>
 	<LayoutRow class="bottom-bar" scrollableX={true}>
-		<WidgetLayout layout={layersPanelBottomBarLayout} />
+		<WidgetLayout layout={layersPanelBottomBarLayout} layoutTarget="LayersPanelBottomBar" />
 	</LayoutRow>
 </LayoutCol>
 

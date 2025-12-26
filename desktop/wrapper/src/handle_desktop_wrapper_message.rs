@@ -1,6 +1,7 @@
 use graphene_std::Color;
 use graphene_std::raster::Image;
 use graphite_editor::messages::app_window::app_window_message_handler::AppWindowPlatform;
+use graphite_editor::messages::clipboard::utility_types::ClipboardContentRaw;
 use graphite_editor::messages::prelude::*;
 
 use super::DesktopWrapperMessageDispatcher;
@@ -10,6 +11,9 @@ pub(super) fn handle_desktop_wrapper_message(dispatcher: &mut DesktopWrapperMess
 	match message {
 		DesktopWrapperMessage::FromWeb(message) => {
 			dispatcher.queue_editor_message(*message);
+		}
+		DesktopWrapperMessage::Input(message) => {
+			dispatcher.queue_editor_message(EditorMessage::InputPreprocessor(message));
 		}
 		DesktopWrapperMessage::OpenFileDialogResult { path, content, context } => match context {
 			OpenFileDialogContext::Document => {
@@ -120,6 +124,10 @@ pub(super) fn handle_desktop_wrapper_message(dispatcher: &mut DesktopWrapperMess
 			let message = FrontendMessage::UpdateMaximized { maximized };
 			dispatcher.queue_editor_message(message);
 		}
+		DesktopWrapperMessage::UpdateFullscreen { fullscreen } => {
+			let message = FrontendMessage::UpdateFullscreen { fullscreen };
+			dispatcher.queue_editor_message(message);
+		}
 		DesktopWrapperMessage::LoadDocument {
 			id,
 			document,
@@ -156,5 +164,13 @@ pub(super) fn handle_desktop_wrapper_message(dispatcher: &mut DesktopWrapperMess
 		}
 		#[cfg(not(target_os = "macos"))]
 		DesktopWrapperMessage::MenuEvent { id: _ } => {}
+		DesktopWrapperMessage::ClipboardReadResult { content } => {
+			if let Some(content) = content {
+				let message = ClipboardMessage::ReadClipboard {
+					content: ClipboardContentRaw::Text(content),
+				};
+				dispatcher.queue_editor_message(message);
+			}
+		}
 	}
 }

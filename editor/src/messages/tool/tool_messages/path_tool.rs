@@ -4,6 +4,7 @@ use crate::consts::{
 	COLOR_OVERLAY_BLUE, COLOR_OVERLAY_GRAY, COLOR_OVERLAY_GREEN, COLOR_OVERLAY_RED, DEFAULT_STROKE_WIDTH, DOUBLE_CLICK_MILLISECONDS, DRAG_DIRECTION_MODE_DETERMINATION_THRESHOLD, DRAG_THRESHOLD,
 	DRILL_THROUGH_THRESHOLD, HANDLE_ROTATE_SNAP_ANGLE, SEGMENT_INSERTION_DISTANCE, SEGMENT_OVERLAY_SIZE, SELECTION_THRESHOLD, SELECTION_TOLERANCE,
 };
+use crate::messages::clipboard::utility_types::ClipboardContent;
 use crate::messages::input_mapper::utility_types::macros::action_shortcut_manual;
 use crate::messages::portfolio::document::graph_operation::utility_types::TransformIn;
 use crate::messages::portfolio::document::node_graph::document_node_definitions::resolve_document_node_type;
@@ -233,8 +234,8 @@ impl LayoutHolder for PathTool {
 			})
 			.widget_instance();
 
-		let related_seperator = Separator::new(SeparatorType::Related).widget_instance();
-		let unrelated_seperator = Separator::new(SeparatorType::Unrelated).widget_instance();
+		let related_seperator = Separator::new(SeparatorStyle::Related).widget_instance();
+		let unrelated_seperator = Separator::new(SeparatorStyle::Unrelated).widget_instance();
 
 		let colinear_handles_description = "Keep both handles unbent, each 180° apart, when moving either.";
 		let colinear_handles_state = manipulator_angle.and_then(|angle| match angle {
@@ -822,7 +823,7 @@ impl PathToolData {
 						.filter(|handle| handle.length(&vector) < 1e-6)
 						.map(|handle| handle.to_manipulator_point())
 						.collect::<Vec<_>>();
-					let endpoint = vector.extendable_points(false).any(|anchor| point == anchor);
+					let endpoint = vector.anchor_endpoints().any(|anchor| point == anchor);
 
 					if drag_zero_handle && (handles.len() == 1 && !endpoint) {
 						shape_editor.deselect_all_points();
@@ -1574,6 +1575,10 @@ impl Fsm for PathToolFsmState {
 
 				shape_editor.set_selected_layers(target_layers);
 
+				let new_state = make_path_editable_is_allowed(&mut document.network_interface).is_some();
+				if tool_data.make_path_editable_is_allowed != new_state {
+					responses.add(MenuBarMessage::SendLayout);
+				}
 				responses.add(OverlaysMessage::Draw);
 				self
 			}
@@ -2657,7 +2662,7 @@ impl Fsm for PathToolFsmState {
 			}
 			(_, PathToolMessage::ClosePath) => {
 				responses.add(DocumentMessage::AddTransaction);
-				shape_editor.close_selected_path(document, responses, tool_action_data.preferences.vector_meshes);
+				shape_editor.close_selected_path(document, responses);
 				responses.add(DocumentMessage::EndTransaction);
 
 				responses.add(OverlaysMessage::Draw);
@@ -2732,10 +2737,13 @@ impl Fsm for PathToolFsmState {
 				}
 
 				if clipboard == Clipboard::Device {
-					let mut copy_text = String::from("graphite/vector: ");
-					copy_text += &serde_json::to_string(&buffer).expect("Could not serialize paste");
-
-					responses.add(FrontendMessage::TriggerTextCopy { copy_text });
+					if let Ok(data) = serde_json::to_string(&buffer) {
+						responses.add(ClipboardMessage::Write {
+							content: ClipboardContent::Vector(data),
+						});
+					} else {
+						log::error!("Failed to serialize nodes for clipboard");
+					}
 				}
 				// TODO: Add implementation for internal clipboard
 
@@ -3121,8 +3129,14 @@ impl Fsm for PathToolFsmState {
 					colinear,
 				};
 
+				let old = tool_data.make_path_editable_is_allowed;
 				tool_data.make_path_editable_is_allowed = make_path_editable_is_allowed(&mut document.network_interface).is_some();
 				tool_data.update_selection_status(shape_editor, document);
+
+				if old != tool_data.make_path_editable_is_allowed {
+					responses.add(MenuBarMessage::SendLayout);
+				}
+
 				self
 			}
 			(_, PathToolMessage::ManipulatorMakeHandlesColinear) => {

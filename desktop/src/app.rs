@@ -1,17 +1,13 @@
 use rfd::AsyncFileDialog;
 use std::fs;
 use std::path::PathBuf;
-use std::sync::mpsc::Receiver;
-use std::sync::mpsc::Sender;
-use std::sync::mpsc::SyncSender;
+use std::sync::mpsc::{Receiver, Sender, SyncSender};
 use std::thread;
-use std::time::Duration;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
 use winit::dpi::PhysicalSize;
-use winit::event::WindowEvent;
-use winit::event_loop::ActiveEventLoop;
-use winit::event_loop::ControlFlow;
+use winit::event::{ButtonSource, ElementState, MouseButton, WindowEvent};
+use winit::event_loop::{ActiveEventLoop, ControlFlow};
 use winit::window::WindowId;
 
 use crate::cef;
@@ -20,7 +16,7 @@ use crate::event::{AppEvent, AppEventScheduler};
 use crate::persist::PersistentData;
 use crate::render::{RenderError, RenderState};
 use crate::window::Window;
-use crate::wrapper::messages::{DesktopFrontendMessage, DesktopWrapperMessage, Platform};
+use crate::wrapper::messages::{DesktopFrontendMessage, DesktopWrapperMessage, InputMessage, MouseKeys, MouseState, Platform};
 use crate::wrapper::{DesktopWrapper, NodeGraphExecutionResult, WgpuContext, serialize_frontend_messages};
 
 pub(crate) struct App {
@@ -28,6 +24,10 @@ pub(crate) struct App {
 	wgpu_context: WgpuContext,
 	window: Option<Window>,
 	window_scale: f64,
+	window_size: PhysicalSize<u32>,
+	window_maximized: bool,
+	window_fullscreen: bool,
+	ui_scale: f64,
 	app_event_receiver: Receiver<AppEvent>,
 	app_event_scheduler: AppEventScheduler,
 	desktop_wrapper: DesktopWrapper,
@@ -81,6 +81,10 @@ impl App {
 			wgpu_context,
 			window: None,
 			window_scale: 1.,
+			window_size: PhysicalSize { width: 0, height: 0 },
+			window_maximized: false,
+			window_fullscreen: false,
+			ui_scale: 1.,
 			app_event_receiver,
 			app_event_scheduler,
 			desktop_wrapper: DesktopWrapper::new(),
@@ -95,6 +99,56 @@ impl App {
 			persistent_data,
 			launch_documents,
 		}
+	}
+
+	fn resize(&mut self) {
+		let Some(window) = &self.window else {
+			tracing::error!("Resize failed due to missing window");
+			return;
+		};
+
+		let maximized = window.is_maximized();
+		if maximized != self.window_maximized {
+			self.window_maximized = maximized;
+			self.app_event_scheduler.schedule(AppEvent::DesktopWrapperMessage(DesktopWrapperMessage::UpdateMaximized { maximized }));
+		}
+
+		let fullscreen = window.is_fullscreen();
+		if fullscreen != self.window_fullscreen {
+			self.window_fullscreen = fullscreen;
+			self.app_event_scheduler
+				.schedule(AppEvent::DesktopWrapperMessage(DesktopWrapperMessage::UpdateFullscreen { fullscreen }));
+		}
+
+		let size = window.surface_size();
+		let scale = window.scale_factor() * self.ui_scale;
+		let is_new_size = size != self.window_size;
+		let is_new_scale = scale != self.window_scale;
+
+		if !is_new_size && !is_new_scale {
+			return;
+		}
+
+		if is_new_size {
+			let _ = self.cef_view_info_sender.send(cef::ViewInfoUpdate::Size {
+				width: size.width,
+				height: size.height,
+			});
+		}
+		if is_new_scale {
+			let _ = self.cef_view_info_sender.send(cef::ViewInfoUpdate::Scale(scale));
+		}
+
+		self.cef_context.notify_view_info_changed();
+
+		if let Some(render_state) = &mut self.render_state {
+			render_state.resize(size.width, size.height);
+		}
+
+		window.request_redraw();
+
+		self.window_size = size;
+		self.window_scale = scale;
 	}
 
 	fn handle_desktop_frontend_message(&mut self, message: DesktopFrontendMessage, responses: &mut Vec<DesktopWrapperMessage>) {
@@ -175,6 +229,10 @@ impl App {
 					let viewport_scale_y = if height != 0.0 { window_size.height as f64 / height } else { 1.0 };
 					render_state.set_viewport_scale([viewport_scale_x as f32, viewport_scale_y as f32]);
 				}
+			}
+			DesktopFrontendMessage::UpdateUIScale { scale } => {
+				self.ui_scale = scale;
+				self.resize();
 			}
 			DesktopFrontendMessage::UpdateOverlays(scene) => {
 				if let Some(render_state) = &mut self.render_state {
@@ -257,6 +315,18 @@ impl App {
 			DesktopFrontendMessage::UpdateMenu { entries } => {
 				if let Some(window) = &self.window {
 					window.update_menu(entries);
+				}
+			}
+			DesktopFrontendMessage::ClipboardRead => {
+				if let Some(window) = &self.window {
+					let content = window.clipboard_read();
+					let message = DesktopWrapperMessage::ClipboardReadResult { content };
+					self.app_event_scheduler.schedule(AppEvent::DesktopWrapperMessage(message));
+				}
+			}
+			DesktopFrontendMessage::ClipboardWrite { content } => {
+				if let Some(window) = &mut self.window {
+					window.clipboard_write(content);
 				}
 			}
 			DesktopFrontendMessage::WindowClose => {
@@ -381,21 +451,16 @@ impl App {
 impl ApplicationHandler for App {
 	fn can_create_surfaces(&mut self, event_loop: &dyn ActiveEventLoop) {
 		let window = Window::new(event_loop, self.app_event_scheduler.clone());
-
-		self.window_scale = window.scale_factor();
-		let _ = self.cef_view_info_sender.send(cef::ViewInfoUpdate::Scale(self.window_scale));
-
-		// Ensures the CEF texture does not remain at 1x1 pixels until the window is resized by the user
-		// Affects only some Mac devices (issue found on 2023 M2 Mac Mini).
-		let PhysicalSize { width, height } = window.surface_size();
-		let _ = self.cef_view_info_sender.send(cef::ViewInfoUpdate::Size { width, height });
-
-		self.cef_context.notify_view_info_changed();
-
 		self.window = Some(window);
 
 		let render_state = RenderState::new(self.window.as_ref().unwrap(), self.wgpu_context.clone());
 		self.render_state = Some(render_state);
+
+		if let Some(window) = &self.window.as_ref() {
+			window.show();
+		}
+
+		self.resize();
 
 		self.desktop_wrapper.init(self.wgpu_context.clone());
 
@@ -421,31 +486,18 @@ impl ApplicationHandler for App {
 			WindowEvent::CloseRequested => {
 				self.app_event_scheduler.schedule(AppEvent::CloseWindow);
 			}
-			WindowEvent::SurfaceResized(PhysicalSize { width, height }) => {
-				let _ = self.cef_view_info_sender.send(cef::ViewInfoUpdate::Size { width, height });
-				self.cef_context.notify_view_info_changed();
-
-				if let Some(render_state) = &mut self.render_state {
-					render_state.resize(width, height);
-				}
-
-				if let Some(window) = &self.window {
-					let maximized = window.is_maximized();
-					self.app_event_scheduler.schedule(AppEvent::DesktopWrapperMessage(DesktopWrapperMessage::UpdateMaximized { maximized }));
-
-					window.request_redraw();
-				}
-			}
-			WindowEvent::ScaleFactorChanged { scale_factor, .. } => {
-				self.window_scale = scale_factor;
-				let _ = self.cef_view_info_sender.send(cef::ViewInfoUpdate::Scale(self.window_scale));
-				self.cef_context.notify_view_info_changed();
+			WindowEvent::SurfaceResized(_) | WindowEvent::ScaleFactorChanged { .. } => {
+				self.resize();
 			}
 			WindowEvent::RedrawRequested => {
+				#[cfg(target_os = "macos")]
+				self.resize();
+
 				let Some(render_state) = &mut self.render_state else { return };
 				if let Some(window) = &self.window {
-					let size = window.surface_size();
-					render_state.resize(size.width, size.height);
+					if !window.can_render() {
+						return;
+					}
 
 					match render_state.render(window) {
 						Ok(_) => {}
@@ -476,6 +528,32 @@ impl ApplicationHandler for App {
 							return;
 						}
 					};
+				}
+			}
+
+			// Forward and Back buttons are not supported by CEF and thus need to be directly forwarded the editor
+			WindowEvent::PointerButton {
+				button: ButtonSource::Mouse(button),
+				state: ElementState::Pressed,
+				..
+			} => {
+				let mouse_keys = match button {
+					MouseButton::Back => Some(MouseKeys::BACK),
+					MouseButton::Forward => Some(MouseKeys::FORWARD),
+					_ => None,
+				};
+				if let Some(mouse_keys) = mouse_keys {
+					let message = DesktopWrapperMessage::Input(InputMessage::PointerDown {
+						editor_mouse_state: MouseState { mouse_keys, ..Default::default() },
+						modifier_keys: Default::default(),
+					});
+					self.app_event_scheduler.schedule(AppEvent::DesktopWrapperMessage(message));
+
+					let message = DesktopWrapperMessage::Input(InputMessage::PointerUp {
+						editor_mouse_state: Default::default(),
+						modifier_keys: Default::default(),
+					});
+					self.app_event_scheduler.schedule(AppEvent::DesktopWrapperMessage(message));
 				}
 			}
 			_ => {}

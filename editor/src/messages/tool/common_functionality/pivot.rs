@@ -83,7 +83,7 @@ pub fn pivot_gizmo_type_widget(state: PivotGizmoState, source: PivotToolSource) 
 				.into(),
 			})
 			.widget_instance(),
-		Separator::new(SeparatorType::Related).widget_instance(),
+		Separator::new(SeparatorStyle::Related).widget_instance(),
 		DropdownInput::new(vec![gizmo_type_entries])
 			.selected_index(Some(match state.gizmo_type {
 				PivotGizmoType::Pivot => 0,
@@ -169,6 +169,7 @@ pub struct PivotGizmoState {
 
 impl PivotGizmoState {
 	pub fn is_pivot_type(&self) -> bool {
+		// A disabled pivot is considered a pivot-type gizmo that is always centered
 		self.gizmo_type == PivotGizmoType::Pivot || self.disabled
 	}
 

@@ -1,6 +1,7 @@
 use super::utility_types::{BoxSelection, ContextMenuInformation, DragStart, FrontendNode};
 use super::{document_node_definitions, node_properties};
 use crate::consts::GRID_SIZE;
+use crate::messages::clipboard::utility_types::ClipboardContent;
 use crate::messages::input_mapper::utility_types::macros::{action_shortcut, action_shortcut_manual};
 use crate::messages::layout::utility_types::widget_prelude::*;
 use crate::messages::portfolio::document::document_message_handler::navigation_controls;
@@ -237,11 +238,13 @@ impl<'a> MessageHandler<NodeGraphMessage, NodeGraphMessageContext<'a>> for NodeG
 				let new_ids = &all_selected_nodes.iter().enumerate().map(|(new, old)| (*old, NodeId(new as u64))).collect();
 				let copied_nodes = network_interface.copy_nodes(new_ids, selection_network_path).collect::<Vec<_>>();
 
-				// Prefix to show that these are nodes
-				let mut copy_text = String::from("graphite/nodes: ");
-				copy_text += &serde_json::to_string(&copied_nodes).expect("Could not serialize copy");
-
-				responses.add(FrontendMessage::TriggerTextCopy { copy_text });
+				let Ok(data) = serde_json::to_string(&copied_nodes) else {
+					log::error!("Failed to serialize nodes for clipboard");
+					return;
+				};
+				responses.add(ClipboardMessage::Write {
+					content: ClipboardContent::Nodes(data),
+				});
 			}
 			NodeGraphMessage::CreateNodeInLayerNoTransaction { node_type, layer } => {
 				let Some(mut modify_inputs) = ModifyInputsContext::new_with_layer(layer, network_interface, responses) else {
@@ -2177,7 +2180,7 @@ impl NodeGraphMessageHandler {
 				})
 				.widget_instance(),
 			//
-			Separator::new(SeparatorType::Unrelated).widget_instance(),
+			Separator::new(SeparatorStyle::Unrelated).widget_instance(),
 			//
 			IconButton::new("Folder", 24)
 				.tooltip_label("Group Selected")
@@ -2200,7 +2203,7 @@ impl NodeGraphMessageHandler {
 				.disabled(!has_selection)
 				.widget_instance(),
 			//
-			Separator::new(SeparatorType::Unrelated).widget_instance(),
+			Separator::new(SeparatorStyle::Unrelated).widget_instance(),
 			//
 			IconButton::new(if selection_all_locked { "PadlockLocked" } else { "PadlockUnlocked" }, 24)
 				.hover_icon(Some((if selection_all_locked { "PadlockUnlocked" } else { "PadlockLocked" }).into()))
@@ -2241,7 +2244,7 @@ impl NodeGraphMessageHandler {
 				.tooltip_description("Restore preview to the graph output.")
 				.on_update(move |_| NodeGraphMessage::TogglePreview { node_id }.into())
 				.widget_instance();
-			widgets.extend([Separator::new(SeparatorType::Unrelated).widget_instance(), button]);
+			widgets.extend([Separator::new(SeparatorStyle::Unrelated).widget_instance(), button]);
 		} else if let Some(&node_id) = selection {
 			let selection_is_not_already_the_output = !network
 				.exports
@@ -2255,14 +2258,14 @@ impl NodeGraphMessageHandler {
 					.tooltip_shortcut(action_shortcut_manual!(Key::Alt, Key::MouseLeft))
 					.on_update(move |_| NodeGraphMessage::TogglePreview { node_id }.into())
 					.widget_instance();
-				widgets.extend([Separator::new(SeparatorType::Unrelated).widget_instance(), button]);
+				widgets.extend([Separator::new(SeparatorStyle::Unrelated).widget_instance(), button]);
 			}
 		}
 
 		let subgraph_path_names_length = subgraph_path_names.len();
 		if subgraph_path_names_length >= 2 {
 			widgets.extend([
-				Separator::new(SeparatorType::Unrelated).widget_instance(),
+				Separator::new(SeparatorStyle::Unrelated).widget_instance(),
 				BreadcrumbTrailButtons::new(subgraph_path_names)
 					.on_update(move |index| {
 						DocumentMessage::ExitNestedNetwork {
@@ -2302,11 +2305,11 @@ impl NodeGraphMessageHandler {
 					.into()
 				})
 				.widget_instance(),
-			Separator::new(SeparatorType::Unrelated).widget_instance(),
+			Separator::new(SeparatorStyle::Unrelated).widget_instance(),
 		];
 		widgets.extend(navigation_controls(node_graph_ptz, navigation_handler, true));
 		widgets.extend([
-			Separator::new(SeparatorType::Unrelated).widget_instance(),
+			Separator::new(SeparatorStyle::Unrelated).widget_instance(),
 			TextButton::new("Node Graph")
 				.icon(Some("GraphViewOpen".into()))
 				.hover_icon(Some("GraphViewClosed".into()))
@@ -2360,9 +2363,9 @@ impl NodeGraphMessageHandler {
 					if let [node_id] = *nodes.as_slice() {
 						properties.push(LayoutGroup::Row {
 							widgets: vec![
-								Separator::new(SeparatorType::Related).widget_instance(),
+								Separator::new(SeparatorStyle::Related).widget_instance(),
 								IconLabel::new("Node").tooltip_description("Name of the selected node.").widget_instance(),
-								Separator::new(SeparatorType::Related).widget_instance(),
+								Separator::new(SeparatorStyle::Related).widget_instance(),
 								TextInput::new(context.network_interface.display_name(&node_id, context.selection_network_path))
 									.tooltip_description("Name of the selected node.")
 									.on_update(move |text_input| {
@@ -2374,7 +2377,7 @@ impl NodeGraphMessageHandler {
 										.into()
 									})
 									.widget_instance(),
-								Separator::new(SeparatorType::Related).widget_instance(),
+								Separator::new(SeparatorStyle::Related).widget_instance(),
 							],
 						});
 					}
@@ -2388,14 +2391,14 @@ impl NodeGraphMessageHandler {
 				// This may require store a separate path for the properties panel
 				let mut properties = vec![LayoutGroup::Row {
 					widgets: vec![
-						Separator::new(SeparatorType::Related).widget_instance(),
+						Separator::new(SeparatorStyle::Related).widget_instance(),
 						IconLabel::new("File").tooltip_description("Name of the current document.").widget_instance(),
-						Separator::new(SeparatorType::Related).widget_instance(),
+						Separator::new(SeparatorStyle::Related).widget_instance(),
 						TextInput::new(context.document_name)
 							.tooltip_description("Name of the current document.")
 							.on_update(|text_input| DocumentMessage::RenameDocument { new_name: text_input.value.clone() }.into())
 							.widget_instance(),
-						Separator::new(SeparatorType::Related).widget_instance(),
+						Separator::new(SeparatorStyle::Related).widget_instance(),
 					],
 				}];
 
@@ -2435,9 +2438,9 @@ impl NodeGraphMessageHandler {
 
 				let mut layer_properties = vec![LayoutGroup::Row {
 					widgets: vec![
-						Separator::new(SeparatorType::Related).widget_instance(),
+						Separator::new(SeparatorStyle::Related).widget_instance(),
 						IconLabel::new("Layer").tooltip_description("Name of the selected layer.").widget_instance(),
-						Separator::new(SeparatorType::Related).widget_instance(),
+						Separator::new(SeparatorStyle::Related).widget_instance(),
 						TextInput::new(context.network_interface.display_name(&layer, context.selection_network_path))
 							.tooltip_description("Name of the selected layer.")
 							.on_update(move |text_input| {
@@ -2449,7 +2452,7 @@ impl NodeGraphMessageHandler {
 								.into()
 							})
 							.widget_instance(),
-						Separator::new(SeparatorType::Related).widget_instance(),
+						Separator::new(SeparatorStyle::Related).widget_instance(),
 						PopoverButton::new()
 							.icon(Some("Node".to_string()))
 							.tooltip_description("Add an operation to the end of this layer's chain of nodes.")
@@ -2474,7 +2477,7 @@ impl NodeGraphMessageHandler {
 								Layout(vec![LayoutGroup::Row { widgets: vec![node_chooser] }])
 							})
 							.widget_instance(),
-						Separator::new(SeparatorType::Related).widget_instance(),
+						Separator::new(SeparatorStyle::Related).widget_instance(),
 					],
 				}];
 
@@ -2711,6 +2714,7 @@ impl NodeGraphMessageHandler {
 				let clippable = layer.can_be_clipped(network_interface.document_metadata());
 				let data = LayerPanelEntry {
 					id: node_id,
+					reference: network_interface.reference(&node_id, &[]).and_then(|x| x.as_ref()).cloned().unwrap_or_default(),
 					alias: network_interface.display_name(&node_id, &[]),
 					in_selected_network: selection_network_path.is_empty(),
 					children_allowed,

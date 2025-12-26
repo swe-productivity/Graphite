@@ -39,13 +39,18 @@ pub enum FrontendMessage {
 		#[serde(rename = "fontSize")]
 		font_size: f64,
 		color: Color,
-		url: String,
+		#[serde(rename = "fontData")]
+		font_data: Vec<u8>,
 		transform: [f64; 6],
 		#[serde(rename = "maxWidth")]
 		max_width: Option<f64>,
 		#[serde(rename = "maxHeight")]
 		max_height: Option<f64>,
 		align: TextAlign,
+	},
+	DisplayEditableTextboxUpdateFontData {
+		#[serde(rename = "fontData")]
+		font_data: Vec<u8>,
 	},
 	DisplayEditableTextboxTransform {
 		transform: [f64; 6],
@@ -65,8 +70,11 @@ pub enum FrontendMessage {
 	SendShortcutAltClick {
 		shortcut: Option<ActionShortcut>,
 	},
+	SendShortcutShiftClick {
+		shortcut: Option<ActionShortcut>,
+	},
 
-	// Trigger prefix: cause a browser API to do something
+	// Trigger prefix: cause a frontend specific API to do something
 	TriggerAboutGraphiteLocalizedCommitDate {
 		#[serde(rename = "commitDate")]
 		commit_date: String,
@@ -92,8 +100,10 @@ pub enum FrontendMessage {
 		name: String,
 		filename: String,
 	},
-	TriggerFontLoad {
+	TriggerFontCatalogLoad,
+	TriggerFontDataLoad {
 		font: Font,
+		url: String,
 	},
 	TriggerImport,
 	TriggerPersistenceRemoveDocument {
@@ -111,7 +121,6 @@ pub enum FrontendMessage {
 	TriggerOpenLaunchDocuments,
 	TriggerLoadPreferences,
 	TriggerOpenDocument,
-	TriggerPaste,
 	TriggerSavePreferences {
 		preferences: PreferencesMessageHandler,
 	},
@@ -120,12 +129,18 @@ pub enum FrontendMessage {
 		document_id: DocumentId,
 	},
 	TriggerTextCommit,
-	TriggerTextCopy {
-		#[serde(rename = "copyText")]
-		copy_text: String,
-	},
 	TriggerVisitLink {
 		url: String,
+	},
+	TriggerClipboardRead,
+	TriggerClipboardWrite {
+		content: String,
+	},
+	TriggerSelectionRead {
+		cut: bool,
+	},
+	TriggerSelectionWrite {
+		content: String,
 	},
 
 	// Update prefix: give the frontend a new value or state for it to use
@@ -312,6 +327,9 @@ pub enum FrontendMessage {
 	UpdateStatusBarHintsLayout {
 		diff: Vec<WidgetDiff>,
 	},
+	UpdateStatusBarInfoLayout {
+		diff: Vec<WidgetDiff>,
+	},
 	UpdateWorkingColorsLayout {
 		diff: Vec<WidgetDiff>,
 	},
@@ -320,6 +338,9 @@ pub enum FrontendMessage {
 	},
 	UpdateMaximized {
 		maximized: bool,
+	},
+	UpdateFullscreen {
+		fullscreen: bool,
 	},
 	UpdateViewportHolePunch {
 		active: bool,
@@ -330,12 +351,18 @@ pub enum FrontendMessage {
 		width: f64,
 		height: f64,
 	},
+	UpdateUIScale {
+		scale: f64,
+	},
+
 	#[cfg(not(target_family = "wasm"))]
 	RenderOverlays {
 		#[serde(skip, default = "OverlayContext::default")]
 		#[derivative(Debug = "ignore", PartialEq = "ignore")]
 		context: OverlayContext,
 	},
+
+	// Window prefix: cause the application window to do something
 	WindowClose,
 	WindowMinimize,
 	WindowMaximize,

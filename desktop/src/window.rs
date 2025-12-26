@@ -12,6 +12,9 @@ pub(crate) trait NativeWindow {
 	fn init() {}
 	fn configure(attributes: WindowAttributes, event_loop: &dyn ActiveEventLoop) -> WindowAttributes;
 	fn new(window: &dyn WinitWindow, app_event_scheduler: AppEventScheduler) -> Self;
+	fn can_render(&self) -> bool {
+		true
+	}
 	fn update_menu(&self, _entries: Vec<MenuItem>) {}
 	fn hide(&self) {}
 	fn hide_others(&self) {}
@@ -38,6 +41,7 @@ pub(crate) struct Window {
 	#[allow(dead_code)]
 	native_handle: native::NativeWindowImpl,
 	custom_cursors: HashMap<CustomCursorSource, CustomCursor>,
+	clipboard: window_clipboard::Clipboard,
 }
 
 impl Window {
@@ -51,17 +55,25 @@ impl Window {
 			.with_min_surface_size(winit::dpi::LogicalSize::new(400, 300))
 			.with_surface_size(winit::dpi::LogicalSize::new(1200, 800))
 			.with_resizable(true)
+			.with_visible(false)
 			.with_theme(Some(winit::window::Theme::Dark));
 
 		attributes = native::NativeWindowImpl::configure(attributes, event_loop);
 
 		let winit_window = event_loop.create_window(attributes).unwrap();
 		let native_handle = native::NativeWindowImpl::new(winit_window.as_ref(), app_event_scheduler);
+		let clipboard = unsafe { window_clipboard::Clipboard::connect(&winit_window) }.expect("failed to create clipboard");
 		Self {
 			winit_window: winit_window.into(),
 			native_handle,
 			custom_cursors: HashMap::new(),
+			clipboard,
 		}
+	}
+
+	pub(crate) fn show(&self) {
+		self.winit_window.set_visible(true);
+		self.winit_window.focus_window();
 	}
 
 	pub(crate) fn request_redraw(&self) {
@@ -74,6 +86,10 @@ impl Window {
 
 	pub(crate) fn pre_present_notify(&self) {
 		self.winit_window.pre_present_notify();
+	}
+
+	pub(crate) fn can_render(&self) -> bool {
+		self.native_handle.can_render()
 	}
 
 	pub(crate) fn surface_size(&self) -> winit::dpi::PhysicalSize<u32> {
@@ -94,6 +110,10 @@ impl Window {
 
 	pub(crate) fn is_maximized(&self) -> bool {
 		self.winit_window.is_maximized()
+	}
+
+	pub(crate) fn is_fullscreen(&self) -> bool {
+		self.winit_window.fullscreen().is_some()
 	}
 
 	pub(crate) fn start_drag(&self) {
@@ -135,6 +155,22 @@ impl Window {
 
 	pub(crate) fn update_menu(&self, entries: Vec<MenuItem>) {
 		self.native_handle.update_menu(entries);
+	}
+
+	pub(crate) fn clipboard_read(&self) -> Option<String> {
+		match self.clipboard.read() {
+			Ok(data) => Some(data),
+			Err(e) => {
+				tracing::error!("Failed to read from clipboard: {e}");
+				None
+			}
+		}
+	}
+
+	pub(crate) fn clipboard_write(&mut self, data: String) {
+		if let Err(e) = self.clipboard.write(data) {
+			tracing::error!("Failed to write to clipboard: {e}")
+		}
 	}
 }
 

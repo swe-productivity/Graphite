@@ -67,6 +67,10 @@ pub(super) fn intercept_frontend_message(dispatcher: &mut DesktopWrapperMessageD
 		FrontendMessage::UpdateViewportPhysicalBounds { x, y, width, height } => {
 			dispatcher.respond(DesktopFrontendMessage::UpdateViewportPhysicalBounds { x, y, width, height });
 		}
+		FrontendMessage::UpdateUIScale { scale } => {
+			dispatcher.respond(DesktopFrontendMessage::UpdateUIScale { scale });
+			return Some(FrontendMessage::UpdateUIScale { scale });
+		}
 		FrontendMessage::TriggerPersistenceWriteDocument { document_id, document, details } => {
 			dispatcher.respond(DesktopFrontendMessage::PersistenceWriteDocument {
 				id: document_id,
@@ -125,6 +129,12 @@ pub(super) fn intercept_frontend_message(dispatcher: &mut DesktopWrapperMessageD
 				}
 				_ => {}
 			}
+		}
+		FrontendMessage::TriggerClipboardRead => {
+			dispatcher.respond(DesktopFrontendMessage::ClipboardRead);
+		}
+		FrontendMessage::TriggerClipboardWrite { content } => {
+			dispatcher.respond(DesktopFrontendMessage::ClipboardWrite { content });
 		}
 		FrontendMessage::WindowClose => {
 			dispatcher.respond(DesktopFrontendMessage::WindowClose);

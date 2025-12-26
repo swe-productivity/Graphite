@@ -4,6 +4,7 @@ use super::utility_types::{PanelType, PersistentData};
 use crate::application::generate_uuid;
 use crate::consts::{DEFAULT_DOCUMENT_NAME, DEFAULT_STROKE_WIDTH, FILE_EXTENSION};
 use crate::messages::animation::TimingInformation;
+use crate::messages::clipboard::utility_types::ClipboardContent;
 use crate::messages::dialog::simple_dialogs;
 use crate::messages::frontend::utility_types::{DocumentDetails, OpenDocument};
 use crate::messages::input_mapper::utility_types::input_keyboard::Key;
@@ -123,9 +124,15 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 				responses.add(FrontendMessage::SendShortcutAltClick {
 					shortcut: action_shortcut_manual!(Key::Alt, Key::MouseLeft),
 				});
+				responses.add(FrontendMessage::SendShortcutShiftClick {
+					shortcut: action_shortcut_manual!(Key::Shift, Key::MouseLeft),
+				});
 
 				// Before loading any documents, initially prepare the welcome screen buttons layout
 				responses.add(PortfolioMessage::RequestWelcomeScreenButtonsLayout);
+
+				// Request status bar info layout
+				responses.add(PortfolioMessage::RequestStatusBarInfoLayout);
 
 				// Tell frontend to finish loading persistent documents
 				responses.add(FrontendMessage::TriggerLoadRestAutoSaveDocuments);
@@ -243,10 +250,20 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 				}
 			}
 			PortfolioMessage::Copy { clipboard } => {
+				if context.current_tool == &ToolType::Path {
+					responses.add(PathToolMessage::Copy { clipboard });
+					return;
+				}
+
 				// We can't use `self.active_document()` because it counts as an immutable borrow of the entirety of `self`
 				let Some(active_document) = self.active_document_id.and_then(|id| self.documents.get_mut(&id)) else {
 					return;
 				};
+
+				if active_document.graph_view_overlay_open() {
+					responses.add(NodeGraphMessage::Copy);
+					return;
+				}
 
 				let mut copy_val = |buffer: &mut Vec<CopyBufferEntry>| {
 					let mut ordered_last_elements = active_document.network_interface.shallowest_unique_layers(&[]).collect::<Vec<_>>();
@@ -283,10 +300,13 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 				if clipboard == Clipboard::Device {
 					let mut buffer = Vec::new();
 					copy_val(&mut buffer);
-					let mut copy_text = String::from("graphite/layer: ");
-					copy_text += &serde_json::to_string(&buffer).expect("Could not serialize paste");
-
-					responses.add(FrontendMessage::TriggerTextCopy { copy_text });
+					let Ok(data) = serde_json::to_string(&buffer) else {
+						log::error!("Failed to serialize nodes for clipboard");
+						return;
+					};
+					responses.add(ClipboardMessage::Write {
+						content: ClipboardContent::Layer(data),
+					});
 				} else {
 					let copy_buffer = &mut self.copy_buffer;
 					copy_buffer[clipboard as usize].clear();
@@ -294,6 +314,18 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 				}
 			}
 			PortfolioMessage::Cut { clipboard } => {
+				if context.current_tool == &ToolType::Path {
+					responses.add(PathToolMessage::Cut { clipboard });
+					return;
+				}
+
+				if let Some(active_document) = self.active_document()
+					&& active_document.graph_view_overlay_open()
+				{
+					responses.add(NodeGraphMessage::Cut);
+					return;
+				}
+
 				responses.add(PortfolioMessage::Copy { clipboard });
 				responses.add(DocumentMessage::DeleteSelectedLayers);
 			}
@@ -323,16 +355,31 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 				self.active_document_id = None;
 				responses.add(MenuBarMessage::SendLayout);
 			}
-			PortfolioMessage::FontLoaded {
-				font_family,
-				font_style,
-				preview_url,
-				data,
-			} => {
-				let font = Font::new(font_family, font_style);
+			PortfolioMessage::FontCatalogLoaded { catalog } => {
+				self.persistent_data.font_catalog = catalog;
 
-				self.persistent_data.font_cache.insert(font, preview_url, data);
+				if let Some(document_id) = self.active_document_id {
+					responses.add(PortfolioMessage::LoadDocumentResources { document_id });
+				}
+
+				// Load the default font
+				let font = Font::new(graphene_std::consts::DEFAULT_FONT_FAMILY.into(), graphene_std::consts::DEFAULT_FONT_STYLE.into());
+				responses.add(PortfolioMessage::LoadFontData { font });
+			}
+			PortfolioMessage::LoadFontData { font } => {
+				if let Some(style) = self.persistent_data.font_catalog.find_font_style_in_catalog(&font) {
+					let font = Font::new(font.font_family, style.to_named_style());
+
+					if !self.persistent_data.font_cache.loaded_font(&font) {
+						responses.add(FrontendMessage::TriggerFontDataLoad { font, url: style.url });
+					}
+				}
+			}
+			PortfolioMessage::FontLoaded { font_family, font_style, data } => {
+				let font = Font::new(font_family, font_style);
+				self.persistent_data.font_cache.insert(font, data);
 				self.executor.update_font_cache(self.persistent_data.font_cache.clone());
+
 				for document_id in self.document_ids.iter() {
 					let node_to_inspect = self.node_to_inspect();
 
@@ -356,6 +403,10 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 				if self.active_document_mut().is_some() {
 					responses.add(NodeGraphMessage::RunDocumentGraph);
 				}
+
+				if current_tool == &ToolType::Text {
+					responses.add(TextToolMessage::RefreshEditingFontData);
+				}
 			}
 			PortfolioMessage::EditorPreferences => self.executor.update_editor_preferences(preferences.editor_preferences()),
 			PortfolioMessage::Import => {
@@ -363,13 +414,14 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 				responses.add(FrontendMessage::TriggerImport);
 			}
 			PortfolioMessage::LoadDocumentResources { document_id } => {
-				if let Some(document) = self.document_mut(document_id) {
-					document.load_layer_resources(responses);
+				let catalog = &self.persistent_data.font_catalog;
+
+				if catalog.0.is_empty() {
+					log::error!("Tried to load document resources before font catalog was loaded");
 				}
-			}
-			PortfolioMessage::LoadFont { font } => {
-				if !self.persistent_data.font_cache.loaded_font(&font) {
-					responses.add_front(FrontendMessage::TriggerFontLoad { font });
+
+				if let Some(document) = self.documents.get_mut(&document_id) {
+					document.load_layer_resources(responses, catalog);
 				}
 			}
 			PortfolioMessage::NewDocumentWithName { name } => {
@@ -566,7 +618,7 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 								added_nodes = true;
 							}
 
-							document.load_layer_resources(responses);
+							document.load_layer_resources(responses, &self.persistent_data.font_catalog);
 							let new_ids: HashMap<_, _> = entry.nodes.iter().map(|(id, _)| (*id, NodeId::new())).collect();
 							let layer = LayerNodeIdentifier::new_unchecked(new_ids[&NodeId(0)]);
 							all_new_ids.extend(new_ids.values().cloned());
@@ -901,6 +953,16 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 					layout_target: LayoutTarget::WelcomeScreenButtons,
 				});
 			}
+			PortfolioMessage::RequestStatusBarInfoLayout => {
+				let row = LayoutGroup::Row {
+					widgets: vec![TextLabel::new("Graphite (beta) 1.0.0-RC1").disabled(true).widget_instance()],
+				};
+
+				responses.add(LayoutMessage::SendLayout {
+					layout: Layout(vec![row]),
+					layout_target: LayoutTarget::StatusBarInfo,
+				});
+			}
 			PortfolioMessage::SetActivePanel { panel } => {
 				self.active_panel = panel;
 				responses.add(DocumentMessage::SetActivePanel { active_panel: self.active_panel });
@@ -947,7 +1009,9 @@ impl MessageHandler<PortfolioMessage, PortfolioMessageContext<'_>> for Portfolio
 				};
 				if !document.is_loaded {
 					document.is_loaded = true;
-					responses.add(PortfolioMessage::LoadDocumentResources { document_id });
+					if self.persistent_data.font_catalog.0.is_empty() {
+						responses.add_front(FrontendMessage::TriggerFontCatalogLoad);
+					}
 					responses.add(PortfolioMessage::UpdateDocumentWidgets);
 					responses.add(PropertiesPanelMessage::Clear);
 				}
@@ -1203,10 +1267,6 @@ impl PortfolioMessageHandler {
 		if self.active_document().is_some() {
 			responses.add(EventMessage::ToolAbort);
 			responses.add(ToolMessage::DeactivateTools);
-		} else {
-			// Load the default font upon creating the first document
-			let font = Font::new(graphene_std::consts::DEFAULT_FONT_FAMILY.into(), graphene_std::consts::DEFAULT_FONT_STYLE.into());
-			responses.add(FrontendMessage::TriggerFontLoad { font });
 		}
 
 		// TODO: Remove this and find a way to fix the issue where creating a new document when the node graph is open causes the transform in the new document to be incorrect

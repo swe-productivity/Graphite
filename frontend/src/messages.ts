@@ -102,14 +102,16 @@ export class UpdateNodeGraphTransform extends JsMessage {
 
 export class SendUIMetadata extends JsMessage {
 	@Transform(({ obj }) => new Map(obj.nodeDescriptions))
-	readonly nodeDescriptions!: Map<DefinitionIdentifier, string>;
+	readonly nodeDescriptions!: Map<string, string>;
 
 	readonly nodeTypes!: FrontendNodeType[];
 }
 
-export class SendShortcutF11 extends JsMessage {
+export class SendShortcutFullscreen extends JsMessage {
 	@Transform(({ value }: { value: ActionShortcut }) => value || undefined)
 	readonly shortcut!: ActionShortcut | undefined;
+	@Transform(({ value }: { value: ActionShortcut }) => value || undefined)
+	readonly shortcutMac!: ActionShortcut | undefined;
 }
 
 export class SendShortcutAltClick extends JsMessage {
@@ -220,7 +222,7 @@ export class FrontendNode {
 
 	readonly canBeLayer!: boolean;
 
-	readonly reference!: DefinitionIdentifier | undefined;
+	readonly reference!: string | undefined;
 
 	readonly displayName!: string;
 
@@ -251,7 +253,7 @@ export class FrontendNode {
 }
 
 export class FrontendNodeType {
-	readonly identifier!: DefinitionIdentifier;
+	readonly identifier!: string;
 
 	readonly name!: string;
 
@@ -315,8 +317,6 @@ export class UpdateFullscreen extends JsMessage {
 	readonly fullscreen!: boolean;
 }
 
-export class CloseWindow extends JsMessage {}
-
 export class UpdateViewportHolePunch extends JsMessage {
 	readonly active!: boolean;
 }
@@ -331,6 +331,13 @@ export class UpdateViewportPhysicalBounds extends JsMessage {
 export class UpdateUIScale extends JsMessage {
 	readonly scale!: number;
 }
+
+export class WindowPointerLockMove extends JsMessage {
+	readonly x!: number;
+	readonly y!: number;
+}
+
+export class WindowFullscreen extends JsMessage {}
 
 // Rust enum `Key`
 export type KeyRaw = string;
@@ -831,7 +838,9 @@ export class UpdateDocumentLayerDetails extends JsMessage {
 export class LayerPanelEntry {
 	id!: bigint;
 
-	reference!: DefinitionIdentifier;
+	implementationName!: string;
+
+	iconName!: IconName | undefined;
 
 	alias!: string;
 
@@ -1661,7 +1670,7 @@ export const messageMakers: Record<string, MessageMaker> = {
 	DisplayEditableTextboxTransform,
 	DisplayRemoveEditableTextbox,
 	SendUIMetadata,
-	SendShortcutF11,
+	SendShortcutFullscreen,
 	SendShortcutAltClick,
 	SendShortcutShiftClick,
 	TriggerAboutGraphiteLocalizedCommitDate,
@@ -1728,6 +1737,8 @@ export const messageMakers: Record<string, MessageMaker> = {
 	UpdatePlatform,
 	UpdateMaximized,
 	UpdateFullscreen,
+	WindowPointerLockMove,
+	WindowFullscreen,
 	UpdatePropertiesPanelLayout,
 	UpdatePropertiesPanelState,
 	UpdateStatusBarHintsLayout,

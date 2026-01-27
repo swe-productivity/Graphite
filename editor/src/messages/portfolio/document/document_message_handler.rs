@@ -743,10 +743,12 @@ impl MessageHandler<DocumentMessage, DocumentMessageContext<'_>> for DocumentMes
 					});
 
 					if layer_to_move.parent(self.metadata()) != Some(parent) {
-						// TODO: Fix this so it works when dragging a layer into a group parent which has a Transform node, which used to work before #2689 caused this regression by removing the empty vector table row.
-						// TODO: See #2688 for this issue.
 						let layer_local_transform = self.network_interface.document_metadata().transform_to_viewport(layer_to_move);
-						let undo_transform = self.network_interface.document_metadata().transform_to_viewport(parent).inverse();
+						let undo_transform = self
+							.network_interface
+							.document_metadata()
+							.transform_to_viewport_with_first_transform_node_if_group(parent, &self.network_interface)
+							.inverse();
 						let transform = undo_transform * layer_local_transform;
 
 						responses.add(GraphOperationMessage::TransformSet {
@@ -3413,8 +3415,6 @@ mod document_message_handler_tests {
 		assert_eq!(rect_grandparent, folder2, "Rectangle's grandparent should be folder2");
 	}
 
-	// TODO: Fix https://github.com/GraphiteEditor/Graphite/issues/2688 and reenable this as part of that fix.
-	#[ignore]
 	#[tokio::test]
 	async fn test_moving_layers_retains_transforms() {
 		let mut editor = EditorTestUtils::create();
@@ -3481,9 +3481,9 @@ mod document_message_handler_tests {
 		let rect_bbox_after = document.metadata().bounding_box_viewport(rect_layer).unwrap();
 
 		// Verifing the rectangle maintains approximately the same position in viewport space
-		let before_center = (rect_bbox_before[0] + rect_bbox_before[1]) / 2.; // TODO: Should be: DVec2(0., -25.), regression (#2688) causes it to be: DVec2(100., 25.)
-		let after_center = (rect_bbox_after[0] + rect_bbox_after[1]) / 2.; // TODO:    Should be: DVec2(0., -25.), regression (#2688) causes it to be: DVec2(200., 75.)
-		let distance = before_center.distance(after_center); // TODO:                    Should be: 0.,               regression (#2688) causes it to be: 111.80339887498948
+		let before_center = (rect_bbox_before[0] + rect_bbox_before[1]) / 2.;
+		let after_center = (rect_bbox_after[0] + rect_bbox_after[1]) / 2.;
+		let distance = before_center.distance(after_center);
 
 		assert!(
 			distance < 1.,

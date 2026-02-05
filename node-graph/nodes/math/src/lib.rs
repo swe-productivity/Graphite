@@ -705,6 +705,7 @@ fn logical_or(
 	/// One of the two boolean values, either of which may be true for the node to output true.
 	value: bool,
 	/// The other of the two boolean values, either of which may be true for the node to output true.
+	#[expose]
 	other_value: bool,
 ) -> bool {
 	value || other_value
@@ -717,6 +718,7 @@ fn logical_and(
 	/// One of the two boolean values, both of which must be true for the node to output true.
 	value: bool,
 	/// The other of the two boolean values, both of which must be true for the node to output true.
+	#[expose]
 	other_value: bool,
 ) -> bool {
 	value && other_value
@@ -856,7 +858,7 @@ fn angle_to<T: ToPosition, U: ToPosition>(
 	#[expose]
 	#[implementations(DVec2, DVec2, DAffine2, DAffine2)]
 	target: U,
-	/// Whether the resulting angle should be given in as radians instead of degrees.
+	/// Whether the resulting angle should be given in radians instead of degrees.
 	radians: bool,
 ) -> f64 {
 	let from = observer.to_position();

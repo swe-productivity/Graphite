@@ -74,7 +74,7 @@ pub struct NodeGraphMessageHandler {
 	disconnecting: Option<InputConnector>,
 	initial_disconnecting: bool,
 	/// Node to select on pointer up if multiple nodes are selected and they were not dragged.
-	select_if_not_dragged: Option<NodeId>,
+	pub select_if_not_dragged: Option<NodeId>,
 	/// The start of the dragged line (cannot be moved), stored in node graph coordinates.
 	pub wire_in_progress_from_connector: Option<DVec2>,
 	/// The end point of the dragged line (cannot be moved), stored in node graph coordinates.
@@ -778,6 +778,7 @@ impl<'a> MessageHandler<NodeGraphMessage, NodeGraphMessageContext<'a>> for NodeG
 					// Abort dragging a node
 					if self.drag_start.is_some() {
 						self.drag_start = None;
+						self.select_if_not_dragged = None;
 						responses.add(DocumentMessage::AbortTransaction);
 						responses.add(NodeGraphMessage::SelectedNodesSet {
 							nodes: self.selection_before_pointer_down.clone(),
@@ -1957,6 +1958,7 @@ impl<'a> MessageHandler<NodeGraphMessage, NodeGraphMessageContext<'a>> for NodeG
 
 					let shift = ipp.keyboard.get(Key::Shift as usize);
 					let alt = ipp.keyboard.get(Key::Alt as usize);
+					let control = ipp.keyboard.get(Key::Control as usize);
 					let Some(selected_nodes) = network_interface.selected_nodes_in_nested_network(selection_network_path) else {
 						log::error!("Could not get selected nodes in UpdateBoxSelection");
 						return;
@@ -1982,6 +1984,33 @@ impl<'a> MessageHandler<NodeGraphMessage, NodeGraphMessageContext<'a>> for NodeG
 							}
 						}
 					}
+
+					if control {
+						let mut non_layer_nodes = HashSet::new();
+
+						let layer_nodes = nodes.iter().filter(|node_id| network_interface.is_layer(node_id, selection_network_path));
+						for &layer_id in layer_nodes {
+							for child_id in network_interface.upstream_flow_back_from_nodes(vec![layer_id], selection_network_path, FlowType::LayerChildrenUpstreamFlow) {
+								if nodes.contains(&child_id) && child_id != layer_id {
+									non_layer_nodes.insert(child_id);
+								}
+							}
+						}
+
+						// Remove non-layer nodes from selection
+						if alt {
+							nodes = previous_selection.difference(&non_layer_nodes).cloned().collect();
+						}
+						// Add non-layer nodes to selection
+						else if shift {
+							nodes = previous_selection.union(&non_layer_nodes).cloned().collect();
+						}
+						// Replace selection with non-layer nodes
+						else {
+							nodes = non_layer_nodes;
+						}
+					}
+
 					if nodes != previous_selection {
 						responses.add(NodeGraphMessage::SelectedNodesSet {
 							nodes: nodes.into_iter().collect::<Vec<_>>(),
@@ -2769,6 +2798,7 @@ impl NodeGraphMessageHandler {
 				HintInfo::mouse(MouseMotion::LmbDrag, "Select Area"),
 				HintInfo::keys([Key::Shift], "Extend").prepend_plus(),
 				HintInfo::keys([Key::Alt], "Subtract").prepend_plus(),
+				HintInfo::keys([Key::Control], "Exclude Layers").prepend_plus(),
 			]),
 		]);
 		if self.has_selection {

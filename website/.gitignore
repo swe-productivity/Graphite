@@ -1,4 +1,6 @@
 node_modules/
 public/
-static/fonts/
-static/text-balancer.js
+generated/
+static/*
+!static/js/
+content/learn/node-catalog

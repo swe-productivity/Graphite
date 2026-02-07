@@ -11,9 +11,11 @@ use crate::messages::tool::common_functionality::graph_modification_utils::{self
 use crate::messages::tool::common_functionality::shape_editor::ShapeState;
 use crate::messages::tool::common_functionality::snapping::{SnapCache, SnapCandidatePoint, SnapConstraint, SnapData, SnapManager, SnapTypeConfiguration};
 use crate::messages::tool::common_functionality::utility_functions::{calculate_segment_angle, closest_point, should_extend};
-use graph_craft::document::NodeId;
-use graphene_std::Color;
+use graph_craft::document::value::TaggedValue;
+use graph_craft::document::{NodeId, NodeInput};
+use graphene_std::{Color, NodeInputDecleration};
 use graphene_std::subpath::pathseg_points;
+use graphene_std::transform_nodes::transform::TranslationInput;
 use graphene_std::vector::misc::{HandleId, ManipulatorPointId, dvec2_to_point};
 use graphene_std::vector::{NoHashBuilder, PointId, SegmentId, StrokeId, Vector, VectorModificationType};
 use kurbo::{CubicBez, PathSeg};
@@ -1282,10 +1284,20 @@ impl PenToolData {
 		}
 
 		// New path layer
-		let node_type = resolve_network_node_type("Path").expect("Path node does not exist");
-		let nodes = vec![(NodeId(0), node_type.default_node_template())];
-
 		let parent = document.new_layer_bounding_artboard(input, viewport);
+		let origin_document = snapped.snapped_point_document;
+		let parent_to_document = document.metadata().transform_to_document(parent);
+		let origin_parent = parent_to_document.inverse().transform_point2(origin_document);
+
+		let node_type = resolve_network_node_type("Path").expect("Path node does not exist");
+		let path_node = node_type.default_node_template();
+		let transform_node_type = resolve_network_node_type("Transform").expect("Transform node does not exist");
+		let mut transform_overrides = vec![None; TranslationInput::INDEX + 1];
+		transform_overrides[0] = Some(NodeInput::node(NodeId(1), 0));
+		transform_overrides[TranslationInput::INDEX] = Some(NodeInput::value(TaggedValue::DVec2(origin_parent), false));
+		let transform_node = transform_node_type.node_template_input_override(transform_overrides);
+		let nodes = vec![(NodeId(1), path_node), (NodeId(0), transform_node)];
+
 		let layer = graph_modification_utils::new_custom(NodeId::new(), nodes, parent, responses);
 		self.current_layer = Some(layer);
 		tool_options.fill.apply_fill(layer, responses);

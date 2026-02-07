@@ -10,8 +10,10 @@ use crate::messages::tool::common_functionality::color_selector::{ToolColorOptio
 use crate::messages::tool::common_functionality::graph_modification_utils::{self, find_spline, merge_layers, merge_points};
 use crate::messages::tool::common_functionality::snapping::{SnapCandidatePoint, SnapData, SnapManager, SnapTypeConfiguration, SnappedPoint};
 use crate::messages::tool::common_functionality::utility_functions::{closest_point, should_extend};
+use graph_craft::document::value::TaggedValue;
 use graph_craft::document::{NodeId, NodeInput};
-use graphene_std::Color;
+use graphene_std::{Color, NodeInputDecleration};
+use graphene_std::transform_nodes::transform::TranslationInput;
 use graphene_std::vector::{PointId, SegmentId, VectorModificationType};
 
 #[derive(Default, ExtractField)]
@@ -387,12 +389,20 @@ impl Fsm for SplineToolFsmState {
 				responses.add(DocumentMessage::DeselectAllLayers);
 
 				let parent = document.new_layer_bounding_artboard(input, viewport);
+				let origin_document = snapped.snapped_point_document;
+				let parent_to_document = document.metadata().transform_to_document(parent);
+				let origin_parent = parent_to_document.inverse().transform_point2(origin_document);
 
 				let path_node_type = resolve_network_node_type("Path").expect("Path node does not exist");
 				let path_node = path_node_type.default_node_template();
 				let spline_node_type = resolve_proto_node_type(graphene_std::vector::spline::IDENTIFIER).expect("Spline node does not exist");
-				let spline_node = spline_node_type.node_template_input_override([Some(NodeInput::node(NodeId(1), 0))]);
-				let nodes = vec![(NodeId(1), path_node), (NodeId(0), spline_node)];
+				let spline_node = spline_node_type.node_template_input_override([Some(NodeInput::node(NodeId(2), 0))]);
+				let transform_node_type = resolve_network_node_type("Transform").expect("Transform node does not exist");
+				let mut transform_overrides = vec![None; TranslationInput::INDEX + 1];
+				transform_overrides[0] = Some(NodeInput::node(NodeId(1), 0));
+				transform_overrides[TranslationInput::INDEX] = Some(NodeInput::value(TaggedValue::DVec2(origin_parent), false));
+				let transform_node = transform_node_type.node_template_input_override(transform_overrides);
+				let nodes = vec![(NodeId(2), path_node), (NodeId(1), spline_node), (NodeId(0), transform_node)];
 
 				let layer = graph_modification_utils::new_custom(NodeId::new(), nodes, parent, responses);
 				tool_options.fill.apply_fill(layer, responses);

@@ -8,8 +8,10 @@ use crate::messages::tool::common_functionality::color_selector::{ToolColorOptio
 use crate::messages::tool::common_functionality::graph_modification_utils;
 use crate::messages::tool::common_functionality::utility_functions::should_extend;
 use glam::DVec2;
-use graph_craft::document::NodeId;
-use graphene_std::Color;
+use graph_craft::document::value::TaggedValue;
+use graph_craft::document::{NodeId, NodeInput};
+use graphene_std::{Color, NodeInputDecleration};
+use graphene_std::transform_nodes::transform::TranslationInput;
 use graphene_std::vector::VectorModificationType;
 use graphene_std::vector::{PointId, SegmentId};
 
@@ -284,10 +286,18 @@ impl Fsm for FreehandToolFsmState {
 				responses.add(DocumentMessage::DeselectAllLayers);
 
 				let parent = document.new_layer_bounding_artboard(input, viewport);
+				let origin_document = document.metadata().document_to_viewport.inverse().transform_point2(input.mouse.position);
+				let parent_to_document = document.metadata().transform_to_document(parent);
+				let origin_parent = parent_to_document.inverse().transform_point2(origin_document);
 
 				let node_type = resolve_network_node_type("Path").expect("Path node does not exist");
-				let node = node_type.default_node_template();
-				let nodes = vec![(NodeId(0), node)];
+				let path_node = node_type.default_node_template();
+				let transform_node_type = resolve_network_node_type("Transform").expect("Transform node does not exist");
+				let mut transform_overrides = vec![None; TranslationInput::INDEX + 1];
+				transform_overrides[0] = Some(NodeInput::node(NodeId(1), 0));
+				transform_overrides[TranslationInput::INDEX] = Some(NodeInput::value(TaggedValue::DVec2(origin_parent), false));
+				let transform_node = transform_node_type.node_template_input_override(transform_overrides);
+				let nodes = vec![(NodeId(1), path_node), (NodeId(0), transform_node)];
 
 				let layer = graph_modification_utils::new_custom(NodeId::new(), nodes, parent, responses);
 				tool_options.fill.apply_fill(layer, responses);

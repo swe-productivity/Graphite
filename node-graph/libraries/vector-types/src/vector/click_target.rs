@@ -10,7 +10,6 @@ use core_types::math::quad::Quad;
 use core_types::transform::Transform;
 use glam::{DAffine2, DMat2, DVec2};
 use kurbo::{Affine, BezPath, ParamCurve, PathSeg, Shape};
-
 type BoundingBox = Option<[DVec2; 2]>;
 
 #[derive(Copy, Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -257,9 +256,21 @@ impl ClickTarget {
 		}
 	}
 
-	/// Does the click target intersect the point (accounting for stroke size)
 	pub fn intersect_point(&self, point: DVec2, layer_transform: DAffine2) -> bool {
-		let target_bounds = [point - DVec2::splat(self.stroke_width / 2.), point + DVec2::splat(self.stroke_width / 2.)];
+		const MINIMUM_INFLATION: f64 = 5.;
+		let base_inflation = self.stroke_width / 2.;
+		let target_bounds = if base_inflation < MINIMUM_INFLATION {
+			[
+				point - (DVec2::splat(MINIMUM_INFLATION) * layer_transform.decompose_scale()),
+				point + (DVec2::splat(MINIMUM_INFLATION) * layer_transform.decompose_scale()),
+			]
+		} else {
+			[
+				point - (DVec2::splat(base_inflation) * layer_transform.decompose_scale()),
+				point + (DVec2::splat(base_inflation) * layer_transform.decompose_scale()),
+			]
+		};
+
 		let intersects = |a: [DVec2; 2], b: [DVec2; 2]| a[0].x <= b[1].x && a[1].x >= b[0].x && a[0].y <= b[1].y && a[1].y >= b[0].y;
 		// This bounding box is not very accurate as it is the axis aligned version of the transformed bounding box. However it is fast.
 		if !self
@@ -452,5 +463,83 @@ mod tests {
 			// Should not find the colliding rotation (different exact value)
 			assert!(cache.try_read(rotation2, scale, translation, fp2).is_none());
 		}
+	}
+
+	#[test]
+	fn test_intersect_point_rectangle() {
+		let subpath = Subpath::new_rectangle(DVec2::ZERO, DVec2::new(100., 50.));
+		let click_target = ClickTarget::new_with_subpath(subpath, 1.);
+
+		let rotation = PI / 6.;
+		let scale = DVec2::new(1.5, 1.5);
+		let translation = DVec2::new(20., 30.);
+		let transform = DAffine2::from_scale_angle_translation(scale, rotation, translation);
+
+		let point1 = transform.transform_point2(DVec2::new(100., 50.));
+		let point2 = transform.transform_point2(DVec2::new(100., 50.)) + (DVec2::splat(5.) * scale);
+		let point3 = transform.transform_point2(DVec2::new(100., 50.)) + (DVec2::new(5., 0.) * scale);
+		let point4 = transform.transform_point2(DVec2::new(100., 50.)) + (DVec2::new(0., 5.) * scale);
+
+		let point5 = transform.transform_point2(DVec2::new(100., 50.)) + (DVec2::splat(6.) * scale);
+		let point6 = transform.transform_point2(DVec2::new(100., 50.)) + (DVec2::new(8., 0.) * scale);
+		let point7 = transform.transform_point2(DVec2::new(100., 50.)) + (DVec2::new(0., 6.) * scale);
+
+		let result1 = click_target.intersect_point(point1, transform);
+		assert!(result1, "Expected the click target to intersect with the point at {:?}", point1);
+
+		let result2 = click_target.intersect_point(point2, transform);
+		assert!(result2, "Expected the click target to intersect with the point at {:?}", point2);
+
+		let result3 = click_target.intersect_point(point3, transform);
+		assert!(result3, "Expected the click target to intersect with the point at {:?}", point3);
+
+		let result4 = click_target.intersect_point(point4, transform);
+		assert!(result4, "Expected the click target to intersect with the point at {:?}", point4);
+
+		let result5 = click_target.intersect_point(point5, transform);
+		assert!(!result5, "The click target and the point at {:?} do not intersect", point5);
+
+		let result6 = click_target.intersect_point(point6, transform);
+		assert!(!result6, "The click target and the point at {:?} do not intersect", point6);
+
+		let result7 = click_target.intersect_point(point7, transform);
+		assert!(!result7, "The click target and the point at {:?} do not intersect", point7);
+	}
+
+	#[test]
+	fn test_intersect_point_line() {
+		let subpath = Subpath::new_line(DVec2::new(75., 75.), DVec2::new(125., 125.));
+		let click_target = ClickTarget::new_with_subpath(subpath, 2.);
+
+		let rotation = PI / 12.;
+		let scale = DVec2::new(1., 1.);
+		let translation = DVec2::new(100., 60.);
+		let transform = DAffine2::from_scale_angle_translation(scale, rotation, translation);
+
+		let point1 = transform.transform_point2(DVec2::new(75., 75.));
+		let point2 = transform.transform_point2(DVec2::new(75., 75.)) + (DVec2::splat(5.) * scale);
+		let point3 = transform.transform_point2(DVec2::new(75., 75.)) - (DVec2::splat(5.) * scale);
+
+		let point4 = transform.transform_point2(DVec2::new(75., 75.)) + (DVec2::new(8., 0.) * scale);
+		let point5 = transform.transform_point2(DVec2::new(75., 75.)) - (DVec2::new(0., 6.) * scale);
+		let point6 = transform.transform_point2(DVec2::new(75., 75.)) - (DVec2::splat(6.) * scale);
+
+		let result1 = click_target.intersect_point(point1, transform);
+		assert!(result1, "Expected the click target to intersect with the point at {:?}", point1);
+
+		let result2 = click_target.intersect_point(point2, transform);
+		assert!(result2, "Expected the click target to intersect with the point at {:?}", point2);
+
+		let result3 = click_target.intersect_point(point3, transform);
+		assert!(result3, "Expected the click target to intersect with the point at {:?}", point3);
+
+		let result4 = click_target.intersect_point(point4, transform);
+		assert!(!result4, "The click target and the point at {:?} do not intersect", point4);
+
+		let result5 = click_target.intersect_point(point5, transform);
+		assert!(!result5, "The click target and the point at {:?} do not intersect", point5);
+
+		let result6 = click_target.intersect_point(point6, transform);
+		assert!(!result6, "The click target and the point at {:?} do not intersect", point6);
 	}
 }

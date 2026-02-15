@@ -115,7 +115,11 @@ impl Grid {
 		let start = shape_tool_data.data.viewport_drag_start(document);
 		let end = ipp.mouse.position;
 
-		let (translation, dimensions, angle) = calculate_grid_params(start, end, is_isometric, ipp.keyboard.key(center), ipp.keyboard.key(lock_ratio));
+		let (translation, dimensions_viewport, angle) = calculate_grid_params(start, end, is_isometric, ipp.keyboard.key(center), ipp.keyboard.key(lock_ratio));
+
+		// Convert viewport-space dimensions to document-space
+		let document_to_viewport = document.metadata().document_to_viewport;
+		let dimensions = document_to_viewport.inverse().transform_vector2(dimensions_viewport).abs();
 
 		// Set dimensions/spacing
 		responses.add(NodeGraphMessage::SetInput {

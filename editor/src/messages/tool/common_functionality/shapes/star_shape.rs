@@ -134,7 +134,10 @@ impl Star {
 			// TODO: We need to determine how to allow the polygon node to make irregular shapes
 			update_radius_sign(end, start, layer, document, responses);
 
-			let dimensions = (start - end).abs();
+			// Convert viewport-space dimensions to document-space
+			let document_to_viewport = document.metadata().document_to_viewport;
+			let dimensions_viewport = (start - end).abs();
+			let dimensions = document_to_viewport.inverse().transform_vector2(dimensions_viewport).abs();
 
 			// We keep the smaller dimension's scale at 1 and scale the other dimension accordingly
 			let mut scale = DVec2::ONE;

@@ -36,13 +36,18 @@ impl Rectangle {
 				return;
 			};
 
+			// Convert viewport-space dimensions to document-space
+			let document_to_viewport = document.metadata().document_to_viewport;
+			let dimensions_viewport = (start - end).abs();
+			let dimensions_document = document_to_viewport.inverse().transform_vector2(dimensions_viewport).abs();
+
 			responses.add(NodeGraphMessage::SetInput {
 				input_connector: InputConnector::node(node_id, 1),
-				input: NodeInput::value(TaggedValue::F64((start.x - end.x).abs()), false),
+				input: NodeInput::value(TaggedValue::F64(dimensions_document.x), false),
 			});
 			responses.add(NodeGraphMessage::SetInput {
 				input_connector: InputConnector::node(node_id, 2),
-				input: NodeInput::value(TaggedValue::F64((start.y - end.y).abs()), false),
+				input: NodeInput::value(TaggedValue::F64(dimensions_document.y), false),
 			});
 			responses.add(GraphOperationMessage::TransformSet {
 				layer,

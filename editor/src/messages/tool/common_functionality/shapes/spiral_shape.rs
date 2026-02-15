@@ -57,7 +57,12 @@ impl Spiral {
 		let snapped_viewport_point = document.metadata().document_to_viewport.transform_point2(snapped.snapped_point_document);
 		shape_tool_data.data.snap_manager.update_indicator(snapped);
 
-		let dragged_distance = (viewport_drag_start - snapped_viewport_point).length();
+		// Convert viewport-space distance to document-space
+		let document_to_viewport = document.metadata().document_to_viewport;
+		let dragged_distance_viewport = (viewport_drag_start - snapped_viewport_point).length();
+		// Use the zoom scale (average of x and y scale factors) to convert distance
+		let zoom_scale = (document_to_viewport.matrix2.col(0).length() + document_to_viewport.matrix2.col(1).length()) / 2.;
+		let dragged_distance = dragged_distance_viewport / zoom_scale;
 
 		let Some(node_id) = graph_modification_utils::get_spiral_id(layer, &document.network_interface) else {
 			return;

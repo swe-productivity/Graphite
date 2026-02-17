@@ -3,8 +3,11 @@ use crate::consts::{LINE_ROTATE_SNAP_ANGLE, MANIPULATOR_GROUP_MARKER_SIZE, SELEC
 use crate::messages::portfolio::document::overlays::utility_types::OverlayContext;
 use crate::messages::portfolio::document::utility_types::document_metadata::LayerNodeIdentifier;
 use crate::messages::tool::common_functionality::auto_panning::AutoPanning;
+use crate::messages::tool::common_functionality::compass_rose::Axis;
 use crate::messages::tool::common_functionality::graph_modification_utils::{NodeGraphLayer, get_gradient};
-use crate::messages::tool::common_functionality::snapping::SnapManager;
+use crate::messages::tool::common_functionality::snapping::{self, SnapCandidatePoint, SnapData, SnapManager};
+use crate::messages::tool::common_functionality::transformation_cage::snap_drag;
+use graphene_std::renderer::Quad;
 use graphene_std::vector::style::{Fill, Gradient, GradientType};
 
 #[derive(Default, ExtractField)]
@@ -240,6 +243,24 @@ struct GradientToolData {
 	snap_manager: SnapManager,
 	drag_start: DVec2,
 	auto_panning: AutoPanning,
+	snap_candidates: Vec<SnapCandidatePoint>,
+}
+
+impl GradientToolData {
+	fn get_snap_candidates(&mut self, document: &DocumentMessageHandler, input: &InputPreprocessorMessageHandler, viewport: &ViewportMessageHandler) {
+		self.snap_candidates.clear();
+		let Some(layer) = self.selected_gradient.as_ref().and_then(|gradient| gradient.layer) else {
+			return;
+		};
+		if (self.snap_candidates.len() as f64) < document.snapping_state.tolerance {
+			snapping::get_layer_snap_points(layer, &SnapData::new(document, input, viewport), &mut self.snap_candidates);
+		}
+		if let Some(bounds) = document.metadata().bounding_box_with_transform(layer, DAffine2::IDENTITY) {
+			let quad = document.metadata().transform_to_document(layer) * Quad::from_box(bounds);
+			snapping::get_bbox_points(quad, &mut self.snap_candidates, snapping::BBoxSnapValues::BOUNDING_BOX, document);
+			snapping::get_bbox_points(quad, &mut self.snap_candidates, snapping::BBoxSnapValues::ALIGN_BOUNDING_BOX, document);
+		}
+	}
 }
 
 impl Fsm for GradientToolFsmState {
@@ -266,7 +287,7 @@ impl Fsm for GradientToolFsmState {
 		match (self, event) {
 			(_, GradientToolMessage::Overlays { context: mut overlay_context }) => {
 				let selected = tool_data.selected_gradient.as_ref();
-
+				tool_data.snap_manager.draw_overlays(SnapData::new(document, input, viewport), &mut overlay_context);
 				for layer in document.network_interface.selected_nodes().selected_visible_layers(&document.network_interface) {
 					let Some(gradient) = get_gradient(layer, &document.network_interface) else { continue };
 					let transform = gradient_space_transform(layer, document);
@@ -388,6 +409,8 @@ impl Fsm for GradientToolFsmState {
 				tool_data.drag_start = mouse;
 				let tolerance = (MANIPULATOR_GROUP_MARKER_SIZE * 2.).powi(2);
 
+				tool_data.get_snap_candidates(document, input, viewport);
+
 				let mut dragging = false;
 				for layer in document.network_interface.selected_nodes().selected_visible_layers(&document.network_interface) {
 					let Some(gradient) = get_gradient(layer, &document.network_interface) else { continue };
@@ -459,8 +482,30 @@ impl Fsm for GradientToolFsmState {
 			}
 			(GradientToolFsmState::Drawing, GradientToolMessage::PointerMove { constrain_axis }) => {
 				if let Some(selected_gradient) = &mut tool_data.selected_gradient {
-					let mouse = input.mouse.position; // tool_data.snap_manager.snap_position(responses, document, input.mouse.position);
-					selected_gradient.update_gradient(mouse, responses, input.keyboard.get(constrain_axis as usize), selected_gradient.gradient.gradient_type);
+					let snap_rotate = input.keyboard.get(constrain_axis as usize);
+					let mouse = if !snap_rotate {
+						let ignore = document
+							.network_interface
+							.selected_nodes()
+							.selected_visible_layers(&document.network_interface)
+							.collect::<Vec<LayerNodeIdentifier>>();
+						let snap_data = SnapData::ignore(document, input, viewport, &ignore);
+						let mouse_delta = snap_drag(
+							tool_data.drag_start,
+							input.mouse.position,
+							false,
+							Axis::None,
+							snap_data,
+							&mut tool_data.snap_manager,
+							&tool_data.snap_candidates,
+						);
+						input.mouse.position + mouse_delta
+					} else {
+						input.mouse.position
+					};
+
+					selected_gradient.update_gradient(mouse, responses, snap_rotate, selected_gradient.gradient.gradient_type);
+					tool_data.snap_manager.preview_draw(&SnapData::new(document, input, viewport), mouse);
 				}
 
 				// Auto-panning

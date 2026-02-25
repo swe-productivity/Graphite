@@ -8,6 +8,7 @@ use crate::messages::tool::common_functionality::gizmos::shape_gizmos::circle_ar
 use crate::messages::tool::common_functionality::gizmos::shape_gizmos::sweep_angle_gizmo::{SweepAngleGizmo, SweepAngleGizmoState};
 use crate::messages::tool::common_functionality::graph_modification_utils;
 use crate::messages::tool::common_functionality::shapes::shape_utility::{ShapeGizmoHandler, arc_outline};
+use crate::messages::tool::common_functionality::utility_functions::{viewport_to_document_dimensions, viewport_zoom};
 use crate::messages::tool::tool_messages::tool_prelude::*;
 use glam::DAffine2;
 use graph_craft::document::NodeInput;
@@ -158,7 +159,8 @@ impl Arc {
 				return;
 			};
 
-			let dimensions = (start - end).abs();
+			let dimensions = viewport_to_document_dimensions(document, start, end);
+			let zoom = viewport_zoom(document);
 			let mut scale = DVec2::ONE;
 			let radius: f64;
 
@@ -178,7 +180,7 @@ impl Arc {
 
 			responses.add(GraphOperationMessage::TransformSet {
 				layer,
-				transform: DAffine2::from_scale_angle_translation(scale, 0., start.midpoint(end)),
+				transform: DAffine2::from_scale_angle_translation(scale * zoom, 0., start.midpoint(end)),
 				transform_in: TransformIn::Viewport,
 				skip_rerender: false,
 			});

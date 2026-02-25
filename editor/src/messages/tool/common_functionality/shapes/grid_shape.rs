@@ -9,6 +9,7 @@ use crate::messages::tool::common_functionality::gizmos::shape_gizmos::grid_rows
 use crate::messages::tool::common_functionality::graph_modification_utils;
 use crate::messages::tool::common_functionality::shape_editor::ShapeState;
 use crate::messages::tool::common_functionality::shapes::shape_utility::ShapeGizmoHandler;
+use crate::messages::tool::common_functionality::utility_functions::viewport_zoom;
 use crate::messages::tool::tool_messages::tool_prelude::*;
 use glam::DAffine2;
 use graph_craft::document::NodeInput;
@@ -117,9 +118,9 @@ impl Grid {
 
 		let (translation, dimensions_viewport, angle) = calculate_grid_params(start, end, is_isometric, ipp.keyboard.key(center), ipp.keyboard.key(lock_ratio));
 
-		// Convert viewport-space dimensions to document-space
 		let document_to_viewport = document.metadata().document_to_viewport;
 		let dimensions = document_to_viewport.inverse().transform_vector2(dimensions_viewport).abs();
+		let zoom = viewport_zoom(document);
 
 		// Set dimensions/spacing
 		responses.add(NodeGraphMessage::SetInput {
@@ -138,7 +139,7 @@ impl Grid {
 		// Set transform
 		responses.add(GraphOperationMessage::TransformSet {
 			layer,
-			transform: DAffine2::from_scale_angle_translation(DVec2::ONE, 0., translation),
+			transform: DAffine2::from_scale_angle_translation(DVec2::splat(zoom), 0., translation),
 			transform_in: TransformIn::Viewport,
 			skip_rerender: false,
 		});

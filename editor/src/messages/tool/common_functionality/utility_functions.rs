@@ -22,6 +22,18 @@ use graphene_std::vector::misc::{HandleId, ManipulatorPointId, dvec2_to_point};
 use graphene_std::vector::{HandleExt, PointId, SegmentId, Vector, VectorModification, VectorModificationType};
 use kurbo::{CubicBez, DEFAULT_ACCURACY, Line, ParamCurve, PathSeg, Point, QuadBez, Shape};
 
+/// Converts viewport-space dimensions (the absolute difference between two viewport points) to document-space dimensions.
+pub fn viewport_to_document_dimensions(document: &DocumentMessageHandler, start: DVec2, end: DVec2) -> DVec2 {
+	let document_to_viewport = document.metadata().document_to_viewport;
+	let dimensions_viewport = (start - end).abs();
+	document_to_viewport.inverse().transform_vector2(dimensions_viewport).abs()
+}
+
+/// Returns the viewport zoom scale factor from the document-to-viewport transform.
+pub fn viewport_zoom(document: &DocumentMessageHandler) -> f64 {
+	document.metadata().document_to_viewport.matrix2.col(0).length()
+}
+
 /// Determines if a path should be extended. Goal in viewport space. Returns the path and if it is extending from the start, if applicable.
 pub fn should_extend(document: &DocumentMessageHandler, goal: DVec2, tolerance: f64, layers: impl Iterator<Item = LayerNodeIdentifier>) -> Option<(LayerNodeIdentifier, PointId, DVec2)> {
 	closest_point(document, goal, tolerance, layers, |_| false)

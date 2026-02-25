@@ -5,6 +5,7 @@ use crate::messages::portfolio::document::node_graph::document_node_definitions:
 use crate::messages::portfolio::document::utility_types::document_metadata::LayerNodeIdentifier;
 use crate::messages::portfolio::document::utility_types::network_interface::{InputConnector, NodeTemplate};
 use crate::messages::tool::common_functionality::graph_modification_utils;
+use crate::messages::tool::common_functionality::utility_functions::{viewport_to_document_dimensions, viewport_zoom};
 use crate::messages::tool::tool_messages::tool_prelude::*;
 use glam::DAffine2;
 use graph_craft::document::NodeInput;
@@ -36,22 +37,20 @@ impl Ellipse {
 				return;
 			};
 
-			// Convert viewport-space dimensions to document-space
-			let document_to_viewport = document.metadata().document_to_viewport;
-			let dimensions_viewport = (start - end).abs();
-			let dimensions_document = document_to_viewport.inverse().transform_vector2(dimensions_viewport).abs();
+			let dimensions = viewport_to_document_dimensions(document, start, end);
+			let zoom = viewport_zoom(document);
 
 			responses.add(NodeGraphMessage::SetInput {
 				input_connector: InputConnector::node(node_id, 1),
-				input: NodeInput::value(TaggedValue::F64(dimensions_document.x / 2.), false),
+				input: NodeInput::value(TaggedValue::F64(dimensions.x / 2.), false),
 			});
 			responses.add(NodeGraphMessage::SetInput {
 				input_connector: InputConnector::node(node_id, 2),
-				input: NodeInput::value(TaggedValue::F64(dimensions_document.y / 2.), false),
+				input: NodeInput::value(TaggedValue::F64(dimensions.y / 2.), false),
 			});
 			responses.add(GraphOperationMessage::TransformSet {
 				layer,
-				transform: DAffine2::from_translation(start.midpoint(end)),
+				transform: DAffine2::from_scale_angle_translation(DVec2::splat(zoom), 0., start.midpoint(end)),
 				transform_in: TransformIn::Viewport,
 				skip_rerender: false,
 			});

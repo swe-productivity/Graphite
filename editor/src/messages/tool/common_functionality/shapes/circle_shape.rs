@@ -7,6 +7,7 @@ use crate::messages::tool::common_functionality::gizmos::shape_gizmos::circle_ar
 use crate::messages::tool::common_functionality::graph_modification_utils;
 use crate::messages::tool::common_functionality::shape_editor::ShapeState;
 use crate::messages::tool::common_functionality::shapes::shape_utility::{ShapeGizmoHandler, ShapeToolModifierKey};
+use crate::messages::tool::common_functionality::utility_functions::{viewport_to_document_dimensions, viewport_zoom};
 use crate::messages::tool::tool_messages::shape_tool::ShapeToolData;
 use crate::messages::tool::tool_messages::tool_prelude::*;
 use glam::DAffine2;
@@ -101,10 +102,8 @@ impl Circle {
 			return;
 		};
 
-		// Convert viewport-space dimensions to document-space
-		let document_to_viewport = document.metadata().document_to_viewport;
-		let dimensions_viewport = (start - end).abs();
-		let dimensions = document_to_viewport.inverse().transform_vector2(dimensions_viewport).abs();
+		let dimensions = viewport_to_document_dimensions(document, start, end);
+		let zoom = viewport_zoom(document);
 
 		// We keep the smaller dimension's scale at 1 and scale the other dimension accordingly
 		let radius: f64 = if dimensions.x > dimensions.y { dimensions.y / 2. } else { dimensions.x / 2. };
@@ -116,7 +115,7 @@ impl Circle {
 
 		responses.add(GraphOperationMessage::TransformSet {
 			layer,
-			transform: DAffine2::from_scale_angle_translation(DVec2::ONE, 0., start.midpoint(end)),
+			transform: DAffine2::from_scale_angle_translation(DVec2::splat(zoom), 0., start.midpoint(end)),
 			transform_in: TransformIn::Viewport,
 			skip_rerender: false,
 		});

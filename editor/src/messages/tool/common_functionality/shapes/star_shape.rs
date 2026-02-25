@@ -10,6 +10,7 @@ use crate::messages::tool::common_functionality::gizmos::shape_gizmos::point_rad
 use crate::messages::tool::common_functionality::graph_modification_utils;
 use crate::messages::tool::common_functionality::shape_editor::ShapeState;
 use crate::messages::tool::common_functionality::shapes::shape_utility::{ShapeGizmoHandler, star_outline};
+use crate::messages::tool::common_functionality::utility_functions::{viewport_to_document_dimensions, viewport_zoom};
 use crate::messages::tool::tool_messages::tool_prelude::*;
 use core::f64;
 use glam::DAffine2;
@@ -134,10 +135,8 @@ impl Star {
 			// TODO: We need to determine how to allow the polygon node to make irregular shapes
 			update_radius_sign(end, start, layer, document, responses);
 
-			// Convert viewport-space dimensions to document-space
-			let document_to_viewport = document.metadata().document_to_viewport;
-			let dimensions_viewport = (start - end).abs();
-			let dimensions = document_to_viewport.inverse().transform_vector2(dimensions_viewport).abs();
+			let dimensions = viewport_to_document_dimensions(document, start, end);
+			let zoom = viewport_zoom(document);
 
 			// We keep the smaller dimension's scale at 1 and scale the other dimension accordingly
 			let mut scale = DVec2::ONE;
@@ -166,7 +165,7 @@ impl Star {
 
 			responses.add(GraphOperationMessage::TransformSet {
 				layer,
-				transform: DAffine2::from_scale_angle_translation(scale, 0., (start + end) / 2.),
+				transform: DAffine2::from_scale_angle_translation(scale * zoom, 0., (start + end) / 2.),
 				transform_in: TransformIn::Viewport,
 				skip_rerender: false,
 			});

@@ -5,6 +5,7 @@ use crate::messages::portfolio::document::utility_types::document_metadata::Laye
 use crate::messages::portfolio::document::utility_types::network_interface::{InputConnector, NodeTemplate};
 use crate::messages::tool::common_functionality::graph_modification_utils::{self, NodeGraphLayer};
 use crate::messages::tool::common_functionality::snapping::{SnapCandidatePoint, SnapData, SnapTypeConfiguration};
+use crate::messages::tool::common_functionality::utility_functions::viewport_zoom;
 use crate::messages::tool::tool_messages::shape_tool::ShapeOptionsUpdate;
 use crate::messages::tool::tool_messages::tool_prelude::*;
 use glam::DAffine2;
@@ -58,11 +59,9 @@ impl Spiral {
 		shape_tool_data.data.snap_manager.update_indicator(snapped);
 
 		// Convert viewport-space distance to document-space
-		let document_to_viewport = document.metadata().document_to_viewport;
+		let zoom = viewport_zoom(document);
 		let dragged_distance_viewport = (viewport_drag_start - snapped_viewport_point).length();
-		// Use the zoom scale (average of x and y scale factors) to convert distance
-		let zoom_scale = (document_to_viewport.matrix2.col(0).length() + document_to_viewport.matrix2.col(1).length()) / 2.;
-		let dragged_distance = dragged_distance_viewport / zoom_scale;
+		let dragged_distance = dragged_distance_viewport / zoom;
 
 		let Some(node_id) = graph_modification_utils::get_spiral_id(layer, &document.network_interface) else {
 			return;
@@ -84,7 +83,7 @@ impl Spiral {
 
 		responses.add(GraphOperationMessage::TransformSet {
 			layer,
-			transform: DAffine2::from_scale_angle_translation(DVec2::ONE, 0., viewport_drag_start),
+			transform: DAffine2::from_scale_angle_translation(DVec2::splat(zoom), 0., viewport_drag_start),
 			transform_in: TransformIn::Viewport,
 			skip_rerender: false,
 		});

@@ -21,7 +21,7 @@ use vector_types::vector::algorithms::bezpath_algorithms::{self, TValue, evaluat
 use vector_types::vector::algorithms::merge_by_distance::MergeByDistanceExt;
 use vector_types::vector::algorithms::offset_subpath::offset_bezpath;
 use vector_types::vector::algorithms::spline::{solve_spline_first_handle_closed, solve_spline_first_handle_open};
-use vector_types::vector::misc::{CentroidType, ExtrudeJoiningAlgorithm, bezpath_from_manipulator_groups, bezpath_to_manipulator_groups, point_to_dvec2};
+use vector_types::vector::misc::{AngularSpacing, CentroidType, ExtrudeJoiningAlgorithm, RepeatSpacing, bezpath_from_manipulator_groups, bezpath_to_manipulator_groups, point_to_dvec2};
 use vector_types::vector::misc::{MergeByDistanceAlgorithm, PointSpacingType, is_linear};
 use vector_types::vector::misc::{handles_to_segment, segment_to_handles};
 use vector_types::vector::style::{Fill, Gradient, GradientStops, Stroke};
@@ -235,16 +235,75 @@ async fn repeat<I: 'n + Send + Clone>(
 	direction: PixelSize,
 	angle: Angle,
 	#[default(5)] count: IntegerCount,
-) -> Table<I> {
-	let angle = angle.to_radians();
+	spacing: RepeatSpacing,
+) -> Table<I>
+where
+	Table<I>: BoundingBox,
+{
 	let count = count.max(1);
 	let total = (count - 1) as f64;
+
+	let direction_length = direction.length();
+	let direction_unit = if direction_length > 1e-10 { direction / direction_length } else { DVec2::ZERO };
+	let width_along_direction = if matches!(spacing, RepeatSpacing::Envelope | RepeatSpacing::Gap) && direction_unit != DVec2::ZERO {
+		match instance.bounding_box(DAffine2::IDENTITY, false) {
+			RenderBoundingBox::Rectangle(bounds) => {
+				let corners = [
+					DVec2::new(bounds[0].x, bounds[0].y),
+					DVec2::new(bounds[0].x, bounds[1].y),
+					DVec2::new(bounds[1].x, bounds[0].y),
+					DVec2::new(bounds[1].x, bounds[1].y),
+				];
+				let mut min_proj = f64::INFINITY;
+				let mut max_proj = f64::NEG_INFINITY;
+				for corner in corners {
+					let proj = corner.dot(direction_unit);
+					min_proj = min_proj.min(proj);
+					max_proj = max_proj.max(proj);
+				}
+				(max_proj - min_proj).abs()
+			}
+			_ => 0.,
+		}
+	} else {
+		0.
+	};
+
+	let width_vector = direction_unit * width_along_direction;
+	let translation_step = match spacing {
+		RepeatSpacing::Span => {
+			if total > 0. {
+				direction / total
+			} else {
+				DVec2::ZERO
+			}
+		}
+		RepeatSpacing::Pitch => direction,
+		RepeatSpacing::Envelope => {
+			if total > 0. {
+				(direction - width_vector) / total
+			} else {
+				DVec2::ZERO
+			}
+		}
+		RepeatSpacing::Gap => direction + width_vector,
+	};
+	let angle_step = match spacing {
+		RepeatSpacing::Pitch => angle.to_radians(),
+		_ => {
+			if total > 0. {
+				angle.to_radians() / total
+			} else {
+				0.
+			}
+		}
+	};
 
 	let mut result_table = Table::new();
 
 	for index in 0..count {
-		let angle = index as f64 * angle / total;
-		let translation = index as f64 * direction / total;
+		let angle = angle_step * index as f64;
+		let translation = translation_step * index as f64;
 		let transform = DAffine2::from_angle(angle) * DAffine2::from_translation(translation);
 
 		for row in instance.iter() {
@@ -266,17 +325,31 @@ async fn circular_repeat<I: 'n + Send + Clone>(
 	_: impl Ctx,
 	#[implementations(Table<Graphic>, Table<Vector>, Table<Raster<CPU>>, Table<Color>, Table<GradientStops>)] instance: Table<I>,
 	start_angle: Angle,
+	end_angle: Angle,
+	spacing: AngularSpacing,
 	#[unit(" px")]
 	#[default(5)]
 	radius: f64,
 	#[default(5)] count: IntegerCount,
 ) -> Table<I> {
 	let count = count.max(1);
+	let total = (count - 1) as f64;
+	let start_angle = start_angle.to_radians();
+	let angle_step = match spacing {
+		AngularSpacing::Span => {
+			let span = end_angle.to_radians() - start_angle;
+			if total > 0. { span / total } else { 0. }
+		}
+		AngularSpacing::Pitch => {
+			let pitch = end_angle.to_radians();
+			if pitch.abs() > 1e-10 { pitch } else { TAU / count as f64 }
+		}
+	};
 
 	let mut result_table = Table::new();
 
 	for index in 0..count {
-		let angle = DAffine2::from_angle((TAU / count as f64) * index as f64 + start_angle.to_radians());
+		let angle = DAffine2::from_angle(start_angle + angle_step * index as f64);
 		let translation = DAffine2::from_translation(radius * DVec2::Y);
 		let transform = angle * translation;
 
@@ -2429,6 +2502,7 @@ mod test {
 			direction,
 			0.,
 			count,
+			RepeatSpacing::Span,
 		)
 		.await;
 		let vector_table = super::flatten_path(Footprint::default(), repeated).await;
@@ -2448,6 +2522,7 @@ mod test {
 			direction,
 			0.,
 			count,
+			RepeatSpacing::Span,
 		)
 		.await;
 		let vector_table = super::flatten_path(Footprint::default(), repeated).await;
@@ -2459,7 +2534,16 @@ mod test {
 	}
 	#[tokio::test]
 	async fn circular_repeat() {
-		let repeated = super::circular_repeat(Footprint::default(), vector_node_from_bezpath(Rect::new(-1., -1., 1., 1.).to_path(DEFAULT_ACCURACY)), 45., 4., 8).await;
+		let repeated = super::circular_repeat(
+			Footprint::default(),
+			vector_node_from_bezpath(Rect::new(-1., -1., 1., 1.).to_path(DEFAULT_ACCURACY)),
+			45.,
+			45.,
+			AngularSpacing::Pitch,
+			4.,
+			8,
+		)
+		.await;
 		let vector_table = super::flatten_path(Footprint::default(), repeated).await;
 		let vector = vector_table.iter().next().unwrap().element;
 		assert_eq!(vector.region_manipulator_groups().count(), 8);
@@ -2600,7 +2684,7 @@ mod test {
 	#[tokio::test]
 	async fn morph() {
 		let rectangle = vector_node_from_bezpath(Rect::new(0., 0., 100., 100.).to_path(DEFAULT_ACCURACY));
-		let rectangles = super::repeat(Footprint::default(), rectangle, DVec2::new(-100., -100.), 0., 2).await;
+		let rectangles = super::repeat(Footprint::default(), rectangle, DVec2::new(-100., -100.), 0., 2, RepeatSpacing::Span).await;
 		let morphed = super::morph(Footprint::default(), rectangles, 0.5).await;
 		let element = morphed.iter().next().unwrap().element;
 		assert_eq!(

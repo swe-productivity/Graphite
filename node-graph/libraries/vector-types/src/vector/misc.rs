@@ -104,6 +104,26 @@ pub enum PointSpacingType {
 	Quantity,
 }
 
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, Hash, DynAny, specta::Type, node_macro::ChoiceType)]
+#[widget(Radio)]
+pub enum RepeatSpacing {
+	#[default]
+	Span,
+	Pitch,
+	Envelope,
+	Gap,
+}
+
+#[repr(C)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize, Hash, DynAny, specta::Type, node_macro::ChoiceType)]
+#[widget(Radio)]
+pub enum AngularSpacing {
+	Span,
+	#[default]
+	Pitch,
+}
+
 pub fn point_to_dvec2(point: Point) -> DVec2 {
 	DVec2 { x: point.x, y: point.y }
 }

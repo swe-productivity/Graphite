@@ -25,7 +25,7 @@ use graphene_std::raster::{
 use graphene_std::table::{Table, TableRow};
 use graphene_std::text::{Font, TextAlign};
 use graphene_std::transform::{Footprint, ReferencePoint, Transform};
-use graphene_std::vector::misc::{ArcType, CentroidType, ExtrudeJoiningAlgorithm, GridType, MergeByDistanceAlgorithm, PointSpacingType, SpiralType};
+use graphene_std::vector::misc::{AngularSpacing, ArcType, CentroidType, ExtrudeJoiningAlgorithm, GridType, MergeByDistanceAlgorithm, PointSpacingType, RepeatSpacing, SpiralType};
 use graphene_std::vector::style::{Fill, FillChoice, FillType, GradientStops, GradientType, PaintOrder, StrokeAlign, StrokeCap, StrokeJoin};
 
 pub(crate) fn string_properties(text: &str) -> Vec<LayoutGroup> {
@@ -223,6 +223,8 @@ pub(crate) fn property_from_type(
 						Some(x) if x == TypeId::of::<MergeByDistanceAlgorithm>() => enum_choice::<MergeByDistanceAlgorithm>().for_socket(default_info).property_row(),
 						Some(x) if x == TypeId::of::<ExtrudeJoiningAlgorithm>() => enum_choice::<ExtrudeJoiningAlgorithm>().for_socket(default_info).property_row(),
 						Some(x) if x == TypeId::of::<PointSpacingType>() => enum_choice::<PointSpacingType>().for_socket(default_info).property_row(),
+						Some(x) if x == TypeId::of::<RepeatSpacing>() => enum_choice::<RepeatSpacing>().for_socket(default_info).property_row(),
+						Some(x) if x == TypeId::of::<AngularSpacing>() => enum_choice::<AngularSpacing>().for_socket(default_info).property_row(),
 						Some(x) if x == TypeId::of::<BooleanOperation>() => enum_choice::<BooleanOperation>().for_socket(default_info).property_row(),
 						Some(x) if x == TypeId::of::<CentroidType>() => enum_choice::<CentroidType>().for_socket(default_info).property_row(),
 						Some(x) if x == TypeId::of::<LuminanceCalculation>() => enum_choice::<LuminanceCalculation>().for_socket(default_info).property_row(),

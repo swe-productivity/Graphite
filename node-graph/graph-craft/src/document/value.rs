@@ -254,6 +254,8 @@ tagged_value! {
 	MergeByDistanceAlgorithm(vector::misc::MergeByDistanceAlgorithm),
 	ExtrudeJoiningAlgorithm(vector::misc::ExtrudeJoiningAlgorithm),
 	PointSpacingType(vector::misc::PointSpacingType),
+	RepeatSpacing(vector::misc::RepeatSpacing),
+	AngularSpacing(vector::misc::AngularSpacing),
 	SpiralType(vector::misc::SpiralType),
 	#[serde(alias = "LineCap")]
 	StrokeCap(vector::style::StrokeCap),

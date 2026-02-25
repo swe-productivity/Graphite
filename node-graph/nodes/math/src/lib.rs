@@ -10,7 +10,8 @@ use math_parser::value::{Number, Value};
 use num_traits::Pow;
 use rand::{Rng, SeedableRng};
 use std::ops::{Add, Div, Mul, Rem, Sub};
-use vector_types::GradientStops;
+use vector_types::gradient::Gradient;
+use vector_types::{GradientStops, GradientType};
 
 /// The struct that stores the context for the maths parser.
 /// This is currently just limited to supplying `a` and `b` until we add better node graph support and UI for variadic inputs.
@@ -774,6 +775,12 @@ fn gradient_value(_: impl Ctx, _primary: (), gradient: GradientStops) -> Gradien
 #[node_macro::node(category("Value"))]
 fn gradient_table_value(_: impl Ctx, _primary: (), gradient: GradientStops) -> Table<GradientStops> {
 	Table::new_from_element(gradient)
+}
+
+/// Constructs a gradient with color stops, type (linear/radial), and start/end positions.
+#[node_macro::node(category("Value"))]
+fn gradient(_: impl Ctx, _primary: (), stops: GradientStops, gradient_type: GradientType, #[default(DVec2::new(0., 0.5))] start: DVec2, #[default(DVec2::new(1., 0.5))] end: DVec2) -> Gradient {
+	Gradient { stops, gradient_type, start, end }
 }
 
 /// Gets the color at the specified position along the gradient, given a position from 0 (left) to 1 (right).

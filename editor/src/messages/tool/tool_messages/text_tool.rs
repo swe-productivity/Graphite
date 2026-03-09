@@ -470,12 +470,21 @@ impl TextToolData {
 		};
 	}
 
-	fn new_text(&mut self, document: &DocumentMessageHandler, editing_text: EditingText, font_cache: &FontCache, responses: &mut VecDeque<Message>) {
+	fn new_text(
+		&mut self,
+		document: &DocumentMessageHandler,
+		editing_text: EditingText,
+		selected_layer_parent: Option<LayerNodeIdentifier>,
+		font_cache: &FontCache,
+		responses: &mut VecDeque<Message>,
+	) {
 		// Create new text
 		self.new_text = String::new();
 		responses.add(DocumentMessage::AddTransaction);
 
 		self.layer = LayerNodeIdentifier::new_unchecked(NodeId::new());
+
+		let parent = document.new_layer_parent(true);
 
 		responses.add(PortfolioMessage::LoadFontData { font: editing_text.font.clone() });
 		responses.add(GraphOperationMessage::NewTextLayer {
@@ -483,7 +492,7 @@ impl TextToolData {
 			text: String::new(),
 			font: editing_text.font.clone(),
 			typesetting: editing_text.typesetting,
-			parent: document.new_layer_parent(true),
+			parent,
 			insert_index: 0,
 		});
 		responses.add(GraphOperationMessage::FillSet {
@@ -494,10 +503,25 @@ impl TextToolData {
 				Fill::None
 			},
 		});
+
+		let (transform, transform_in) = if let Some(layer_parent) = selected_layer_parent
+			&& parent != LayerNodeIdentifier::ROOT_PARENT
+			&& parent == layer_parent
+		{
+			let layer_transform = document
+				.network_interface
+				.document_metadata()
+				.transform_to_viewport_with_first_transform_node_if_group(layer_parent, &document.network_interface)
+				.inverse();
+			(layer_transform * editing_text.transform, TransformIn::Local)
+		} else {
+			(editing_text.transform, TransformIn::Viewport)
+		};
+
 		responses.add(GraphOperationMessage::TransformSet {
 			layer: self.layer,
-			transform: editing_text.transform,
-			transform_in: TransformIn::Viewport,
+			transform,
+			transform_in,
 			skip_rerender: true,
 		});
 		self.editing_text = Some(editing_text);
@@ -890,6 +914,16 @@ impl Fsm for TextToolFsmState {
 					return TextToolFsmState::Editing;
 				}
 
+				let selected_nodes = document.network_interface.selected_nodes();
+				let mut selected_layers_except_artboards = selected_nodes.selected_layers_except_artboards(&document.network_interface);
+				let selected_layer_parent = if let Some(layer) = selected_layers_except_artboards.next()
+					&& selected_layers_except_artboards.next().is_none()
+				{
+					layer.parent(document.metadata())
+				} else {
+					None
+				};
+
 				// Otherwise create some new text
 				let constraint_size = has_dragged.then_some((start - end).abs());
 				let editing_text = EditingText {
@@ -907,7 +941,7 @@ impl Fsm for TextToolFsmState {
 					font: Font::new(tool_options.font.font_family.clone(), tool_options.font.font_style.clone()),
 					color: tool_options.fill.active_color(),
 				};
-				tool_data.new_text(document, editing_text, font_cache, responses);
+				tool_data.new_text(document, editing_text, selected_layer_parent, font_cache, responses);
 				TextToolFsmState::Editing
 			}
 			(TextToolFsmState::Dragging, TextToolMessage::DragStop) => {
